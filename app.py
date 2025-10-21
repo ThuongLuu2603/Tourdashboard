@@ -9,10 +9,10 @@ import numpy as np
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
-import pytz
+import pytz # Cần thiết cho Timezone handling
 
-
-
+# Import custom modules
+from data_generator import load_or_generate_data # ĐÃ KHÔI PHỤC LỆNH GỌI
 from utils import (
     format_currency, format_number, format_percentage,
     calculate_kpis, create_gauge_chart, create_bar_chart,
@@ -21,6 +21,7 @@ from utils import (
     get_unit_performance, filter_data_by_date, filter_confirmed_bookings
 )
 
+# Page configuration
 st.set_page_config(
     page_title="Vietravel BI Dashboard",
     page_icon="✈️",
@@ -28,76 +29,41 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
-
+# Initialize session state for data
 if 'data_loaded' not in st.session_state:
     with st.spinner('Đang tải dữ liệu...'):
-        
-       
-        current_year = datetime.now().year
-        
-      
-        tours_df = pd.DataFrame({
-            'booking_id': [f"BK{i:06d}" for i in range(1, 5)],
-            'customer_id': [f"KH{i:03d}" for i in range(1, 5)],
-            'booking_date': [datetime(current_year, 10, 15)] * 4,
-            'route': ['DH & ĐBSH', 'Thái Lan', 'Châu Âu', 'Phú Quốc'],
-            'business_unit': ['Miền Bắc', 'Trụ sở & ĐNB', 'Trụ sở & ĐNB', 'Miền Tây'],
-            'sales_channel': ['Online', 'Trực tiếp VPGD', 'Đại lý', 'Online'],
-            'num_customers': [5, 2, 8, 3],
-            'tour_capacity': [20, 25, 30, 15],
-            'price_per_person': [5000000, 10000000, 50000000, 6000000],
-            'revenue': [25000000, 20000000, 400000000, 18000000],
-            'cost': [20000000, 16000000, 320000000, 14000000],
-            'gross_profit': [5000000, 4000000, 80000000, 4000000],
-            'gross_profit_margin': [20.0, 20.0, 20.0, 22.22],
-            'status': ['Đã xác nhận', 'Đã xác nhận', 'Đã xác nhận', 'Đã xác nhận']
-        })
-        
-     
-        plans_df = pd.DataFrame({
-            'year': [current_year] * 4,
-            'month': [10] * 4,
-            'business_unit': ['Miền Bắc', 'Trụ sở & ĐNB', 'Miền Tây', 'Miền Trung'],
-            'route': ['DH & ĐBSH', 'Thái Lan', 'Phú Quốc', 'Nam Trung Bộ'],
-            'planned_customers': [100, 50, 70, 60],
-            'planned_revenue': [500000000, 200000000, 300000000, 150000000],
-            'planned_gross_profit': [100000000, 40000000, 60000000, 30000000]
-        })
-        
-     
-        historical_df = tours_df.copy() 
-        historical_df['booking_date'] = historical_df['booking_date'] - timedelta(days=365)
-
-    
+        # KHỐI CODE TẠO DỮ LIỆU ĐÃ ĐƯỢC KHÔI PHỤC
+        tours_df, plans_df, historical_df = load_or_generate_data()
         st.session_state.tours_df = tours_df
         st.session_state.plans_df = plans_df
         st.session_state.historical_df = historical_df
         st.session_state.data_loaded = True
 
-
+# Load data from session state
 tours_df = st.session_state.tours_df
 plans_df = st.session_state.plans_df
 historical_df = st.session_state.historical_df
 
-
+# Dashboard Title
 st.title("📊 VIETRAVEL - DASHBOARD KINH DOANH TOUR")
 st.markdown("---")
 
-
+# Sidebar filters
 with st.sidebar:
     st.header("🔍 Bộ lọc dữ liệu")
     
- 
+    # Date range selector
     st.subheader("Khoảng thời gian")
-   
+    
+    # Quick date range options
     date_option = st.selectbox(
         "Chọn kỳ báo cáo",
         ["Tháng này", "Tháng trước", "Quý này", "Năm nay", "Tùy chỉnh"]
     )
     
+    # ĐÃ SỬA: Xử lý Timezone an toàn cho Cloud
     vietnam_tz = pytz.timezone("Asia/Ho_Chi_Minh")
-    today = datetime.now(vietnam_tz).replace(tzinfo=None)
+    today = datetime.now(vietnam_tz).replace(tzinfo=None) # Naive datetime
     
     if date_option == "Tháng này":
         start_date = datetime(today.year, today.month, 1)
@@ -114,7 +80,7 @@ with st.sidebar:
     elif date_option == "Năm nay":
         start_date = datetime(today.year, 1, 1)
         end_date = today
-    else:  
+    else:  # Tùy chỉnh
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
@@ -131,12 +97,12 @@ with st.sidebar:
     
     st.markdown(f"**Kỳ báo cáo:** {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}")
     
-   
+    # Business unit filter
     st.subheader("Đơn vị kinh doanh")
     business_units = ["Tất cả"] + sorted(tours_df['business_unit'].unique().tolist())
     selected_unit = st.selectbox("Chọn đơn vị", business_units)
     
- 
+    # Route filter
     st.subheader("Tuyến tour")
     if selected_unit != "Tất cả":
         routes = ["Tất cả"] + sorted(
@@ -146,18 +112,18 @@ with st.sidebar:
         routes = ["Tất cả"] + sorted(tours_df['route'].unique().tolist())
     selected_route = st.selectbox("Chọn tuyến", routes)
     
-
+    # Top N selector
     st.subheader("Thiết lập hiển thị")
     top_n = st.slider("Top N tuyến tour", min_value=5, max_value=15, value=10)
     
     st.markdown("---")
     
-  
+    # Refresh data button
     if st.button("🔄 Làm mới dữ liệu", use_container_width=True):
         st.session_state.data_loaded = False
         st.rerun()
 
-
+# Filter data based on selections
 filtered_tours = filter_data_by_date(tours_df, start_date, end_date)
 
 if selected_unit != "Tất cả":
@@ -166,13 +132,15 @@ if selected_unit != "Tất cả":
 if selected_route != "Tất cả":
     filtered_tours = filtered_tours[filtered_tours['route'] == selected_route]
 
-
+# Calculate KPIs
 kpis = calculate_kpis(tours_df, plans_df, start_date, end_date)
 
-
+# ============================================================
+# SECTION I: OVERALL PERFORMANCE INDICATORS
+# ============================================================
 st.header("I. 📈 CHỈ SỐ HIỆU SUẤT TỔNG QUAN")
 
-
+# KPI Cards - Row 1
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -207,7 +175,7 @@ with col3:
 
 st.markdown("---")
 
-
+# Completion Rate Gauges
 st.subheader("Tỷ lệ hoàn thành kế hoạch")
 
 col1, col2 = st.columns(2)
@@ -228,10 +196,12 @@ with col2:
 
 st.markdown("---")
 
-
+# ============================================================
+# SECTION II: DETAILED ANALYSIS & TOUR ROUTES
+# ============================================================
 st.header("II. 🔍 CHỈ SỐ PHÂN TÍCH CHI TIẾT & TUYẾN TOUR")
 
-
+# Top Routes Analysis
 st.subheader(f"Top {top_n} Tuyến Tour")
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -246,7 +216,7 @@ with tab1:
     top_revenue = get_top_routes(filtered_tours, n=top_n, metric='revenue')
     
     if not top_revenue.empty:
-     
+        # Bar chart
         fig = create_bar_chart(
             top_revenue,
             x='route',
@@ -260,7 +230,7 @@ with tab1:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-      
+        # Data table
         display_df = top_revenue.copy()
         display_df['revenue'] = display_df['revenue'].apply(format_currency)
         display_df['num_customers'] = display_df['num_customers'].apply(format_number)
@@ -277,7 +247,7 @@ with tab2:
     top_customers = get_top_routes(filtered_tours, n=top_n, metric='customers')
     
     if not top_customers.empty:
-    
+        # Bar chart
         fig = create_bar_chart(
             top_customers,
             x='route',
@@ -291,7 +261,7 @@ with tab2:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-       
+        # Data table
         display_df = top_customers.copy()
         display_df['revenue'] = display_df['revenue'].apply(format_currency)
         display_df['num_customers'] = display_df['num_customers'].apply(format_number)
@@ -308,7 +278,7 @@ with tab3:
     top_profit = get_top_routes(filtered_tours, n=top_n, metric='gross_profit')
     
     if not top_profit.empty:
-        
+        # Horizontal bar chart for profit margin
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
@@ -335,7 +305,7 @@ with tab3:
         
         st.plotly_chart(fig, use_container_width=True)
         
-     
+        # Data table
         display_df = top_profit.copy()
         display_df['revenue'] = display_df['revenue'].apply(format_currency)
         display_df['num_customers'] = display_df['num_customers'].apply(format_number)
@@ -350,14 +320,14 @@ with tab3:
 with tab4:
     st.markdown("#### Tốc độ đạt kế hoạch (%) theo tuyến Tour")
     
-   
+    # Calculate completion rate by route
     confirmed_filtered = filter_confirmed_bookings(filtered_tours)
     actual_by_route = confirmed_filtered.groupby('route').agg({
         'revenue': 'sum',
         'num_customers': 'sum'
     }).reset_index()
     
-
+    # Get plans for the period
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
     plan_mask = (plans_df['year'] == start_dt.year) & \
@@ -369,15 +339,20 @@ with tab4:
         'planned_revenue': 'sum'
     }).reset_index()
     
- 
+    # Merge and calculate
     completion_by_route = actual_by_route.merge(plan_by_route, on='route', how='left')
-    completion_by_route['completion_rate'] = (
-        completion_by_route['revenue'] / completion_by_route['planned_revenue'] * 100
+    
+    # SỬA LỖI: Thêm np.where cho lỗi chia cho 0.
+    completion_by_route['completion_rate'] = np.where(
+        completion_by_route['planned_revenue'].fillna(0) > 0,
+        (completion_by_route['revenue'] / completion_by_route['planned_revenue'] * 100).fillna(0),
+        0
     )
+    
     completion_by_route = completion_by_route.sort_values('completion_rate', ascending=False).head(top_n)
     
     if not completion_by_route.empty:
-        
+        # Bar chart
         fig = go.Figure()
         
         colors = ['#00CC96' if x >= 100 else '#FFA500' if x >= 80 else '#EF553B' 
@@ -391,7 +366,7 @@ with tab4:
             marker_color=colors
         ))
         
-        
+        # Add 100% reference line
         fig.add_hline(y=100, line_dash="dash", line_color="red", 
                       annotation_text="Mục tiêu 100%")
         
@@ -405,7 +380,7 @@ with tab4:
         
         st.plotly_chart(fig, use_container_width=True)
         
-      
+        # Data table
         display_df = completion_by_route.copy()
         display_df['revenue'] = display_df['revenue'].apply(format_currency)
         display_df['planned_revenue'] = display_df['planned_revenue'].apply(format_currency)
@@ -419,7 +394,7 @@ with tab4:
 
 st.markdown("---")
 
-
+# Sales Channel Analysis
 st.subheader("Lượt khách theo Kênh bán")
 
 confirmed_filtered = filter_confirmed_bookings(filtered_tours)
@@ -432,7 +407,7 @@ if not channel_data.empty:
     col1, col2 = st.columns(2)
     
     with col1:
-        
+        # Pie chart for customers by channel
         fig = create_pie_chart(
             channel_data,
             values='num_customers',
@@ -442,7 +417,7 @@ if not channel_data.empty:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-       
+        # Pie chart for revenue by channel
         fig = create_pie_chart(
             channel_data,
             values='revenue',
@@ -451,11 +426,15 @@ if not channel_data.empty:
         )
         st.plotly_chart(fig, use_container_width=True)
     
-    
+    # Data table
     display_df = channel_data.copy()
     display_df['num_customers'] = display_df['num_customers'].apply(format_number)
     display_df['revenue'] = display_df['revenue'].apply(format_currency)
-    display_df['avg_revenue_per_customer'] = (channel_data['revenue'] / channel_data['num_customers']).apply(format_currency)
+    display_df['avg_revenue_per_customer'] = np.where(
+        channel_data['num_customers'] > 0,
+        (channel_data['revenue'] / channel_data['num_customers']).apply(format_currency),
+        format_currency(0)
+    )
     
     display_df.columns = ['Kênh bán', 'Lượt khách', 'Doanh thu', 'Doanh thu TB/khách']
     st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -464,13 +443,13 @@ else:
 
 st.markdown("---")
 
-
+# Business Unit Performance
 st.subheader("Hiệu suất theo Đơn vị Kinh doanh")
 
 unit_performance = get_unit_performance(tours_df, plans_df, start_date, end_date)
 
 if not unit_performance.empty:
-    
+    # Bar chart comparing actual vs planned
     fig = go.Figure()
     
     fig.add_trace(go.Bar(
@@ -499,7 +478,7 @@ if not unit_performance.empty:
     
     st.plotly_chart(fig, use_container_width=True)
     
-   
+    # Performance table
     display_df = unit_performance.copy()
     display_df['actual_revenue'] = display_df['actual_revenue'].apply(format_currency)
     display_df['planned_revenue'] = display_df['planned_revenue'].apply(format_currency)
@@ -524,10 +503,12 @@ else:
 
 st.markdown("---")
 
-
+# ============================================================
+# SECTION III: OPERATIONAL MANAGEMENT & ALERTS
+# ============================================================
 st.header("III. ⚙️ CHỈ SỐ QUẢN LÝ HOẠT ĐỘNG & CẢNH BÁO")
 
-
+# Operational Metrics
 operational_metrics = calculate_operational_metrics(filtered_tours)
 
 col1, col2, col3 = st.columns(3)
@@ -538,7 +519,7 @@ with col1:
         value=format_percentage(operational_metrics['avg_occupancy'])
     )
     
-
+    # Occupancy gauge
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = operational_metrics['avg_occupancy'],
@@ -569,7 +550,7 @@ with col2:
         value=format_percentage(operational_metrics['cancel_rate'])
     )
     
-    
+    # Cancellation gauge
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = operational_metrics['cancel_rate'],
@@ -600,7 +581,7 @@ with col3:
         value=format_percentage(operational_metrics['returning_rate'])
     )
     
-
+    # Returning customer gauge
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = operational_metrics['returning_rate'],
@@ -627,7 +608,7 @@ with col3:
 
 st.markdown("---")
 
-
+# Low Margin Tours Alert
 st.subheader("🚨 Cảnh báo Lợi nhuận Gộp Dưới Ngưỡng An toàn")
 
 low_margin_tours = get_low_margin_tours(filtered_tours, threshold=5)
@@ -635,7 +616,7 @@ low_margin_tours = get_low_margin_tours(filtered_tours, threshold=5)
 if not low_margin_tours.empty:
     st.warning(f"⚠️ Phát hiện {len(low_margin_tours)} tuyến tour có tỷ suất lợi nhuận < 5%")
     
-  
+    # Alert table
     display_df = low_margin_tours.copy()
     display_df['revenue'] = display_df['revenue'].apply(format_currency)
     display_df['gross_profit'] = display_df['gross_profit'].apply(format_currency)
@@ -644,7 +625,7 @@ if not low_margin_tours.empty:
     
     display_df.columns = ['Tuyến Tour', 'Lợi nhuận gộp', 'Doanh thu', 'Lượt khách', 'Tỷ suất LN (%)']
     
-    
+    # Highlight low margins in red
     def highlight_low_margin(row):
         return ['background-color: #FFE5E5' if 'Tỷ suất LN' in col else '' for col in row.index]
     
@@ -654,7 +635,7 @@ if not low_margin_tours.empty:
         hide_index=True
     )
     
-   
+    # Bar chart of low margin tours
     fig = go.Figure()
     
     fig.add_trace(go.Bar(
@@ -682,7 +663,7 @@ else:
 
 st.markdown("---")
 
-
+# Footer
 st.markdown("""
     <div style='text-align: center; padding: 20px; color: #666;'>
         <p>📊 Vietravel Business Intelligence Dashboard</p>
