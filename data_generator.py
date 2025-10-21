@@ -23,30 +23,31 @@ class VietravelDataGenerator:
         
         # Define tour routes (tuyến tour)
         self.tour_routes = [
-            "Hà Nội - Hạ Long - Sapa",
-            "Hồ Chí Minh - Đà Lạt - Nha Trang",
-            "Đà Nẵng - Hội An - Huế",
-            "Phú Quốc - Nam Du",
-            "Cần Thơ - Miền Tây",
-            "Quy Nhơn - Phú Yên",
-            "Ninh Bình - Tam Cốc",
-            "Hà Nội - Mai Châu - Mộc Châu",
-            "Bangkok - Pattaya",
+            "DH & ĐBSH",
+            "Nam Trung Bộ",
+            "Bắc Trung Bộ",
+            "Liên Tuyến miền Tây",
+            "Phú Quốc",
+            "Thái Lan",
+            "Trung Quốc",
+            "Hàn Quốc",
             "Singapore - Malaysia",
-            "Seoul - Nami - Everland",
-            "Tokyo - Osaka - Kyoto",
-            "Bali - Indonesia",
-            "Phuket - Krabi",
-            "Paris - Thụy Sĩ - Ý"
+            "Nhật Bản",
+            "Châu Âu",
+            "Châu Mỹ",
+            "Châu Úc",
+            "Châu Phi",
+            "Tây Bắc",
+            "Đông Bắc",
+            "Tây Nguyên"
         ]
         
         # Business units (đơn vị kinh doanh)
         self.business_units = [
-            "Miền Bắc",
             "Miền Trung",
-            "Miền Nam",
-            "Quốc Tế Châu Á",
-            "Quốc Tế Châu Âu"
+            "Miền Tây",
+            "Miền Bắc",
+            "Trụ sở & ĐNB"
         ]
         
         # Sales channels (kênh bán)
@@ -58,21 +59,23 @@ class VietravelDataGenerator:
         
         # Map routes to business units
         self.route_to_unit = {
-            "Hà Nội - Hạ Long - Sapa": "Miền Bắc",
-            "Hồ Chí Minh - Đà Lạt - Nha Trang": "Miền Nam",
-            "Đà Nẵng - Hội An - Huế": "Miền Trung",
-            "Phú Quốc - Nam Du": "Miền Nam",
-            "Cần Thơ - Miền Tây": "Miền Nam",
-            "Quy Nhơn - Phú Yên": "Miền Trung",
-            "Ninh Bình - Tam Cốc": "Miền Bắc",
-            "Hà Nội - Mai Châu - Mộc Châu": "Miền Bắc",
-            "Bangkok - Pattaya": "Quốc Tế Châu Á",
-            "Singapore - Malaysia": "Quốc Tế Châu Á",
-            "Seoul - Nami - Everland": "Quốc Tế Châu Á",
-            "Tokyo - Osaka - Kyoto": "Quốc Tế Châu Á",
-            "Bali - Indonesia": "Quốc Tế Châu Á",
-            "Phuket - Krabi": "Quốc Tế Châu Á",
-            "Paris - Thụy Sĩ - Ý": "Quốc Tế Châu Âu"
+            "DH & ĐBSH": "Miền Bắc",
+            "Tây Nguyên": "Miền Tây",
+            "Bắc Trung Bộ": "Miền Trung",
+            "Phú Quốc": "Miền Tây",
+            "Liên Tuyến miền Tây": "Miền Tây",
+            "Nam Trung Bộ": "Miền Trung",
+            "Đông Bắc": "Miền Bắc",
+            "Tây Bắc": "Miền Bắc",
+            "Singapore - Malaysia": "Trụ sở & ĐNB",
+            "Hàn Quốc": "Trụ sở & ĐNB",
+            "Nhật Bản": "Trụ sở & ĐNB",
+            "Trung Quốc": "Trụ sở & ĐNB",
+            "Thái Lan": "Trụ sở & ĐNB",
+            "Châu Âu": "Trụ sở & ĐNB",
+            "Châu Mỹ": "Trụ sở & ĐNB",
+            "Châu Úc": "Trụ sở & ĐNB",
+            "Châu Phi": "Trụ sở & ĐNB"
         }
         
         # Safety margin thresholds by route
@@ -123,11 +126,15 @@ class VietravelDataGenerator:
             tour_capacity = random.choice([20, 25, 30, 35, 40, 45])
             
             # Price per person (depends on route)
-            if "Châu Âu" in business_unit:
+            if route in ["Châu Âu", "Châu Mỹ"]:
                 price_per_person = random.randint(45000000, 75000000)
-            elif "Châu Á" in business_unit and route not in ["Bangkok - Pattaya", "Phuket - Krabi"]:
+            elif route in ["Châu Úc", "Châu Phi"]:
+                price_per_person = random.randint(35000000, 60000000)
+            elif route in ["Nhật Bản", "Hàn Quốc"]:
                 price_per_person = random.randint(15000000, 35000000)
-            else:
+            elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                price_per_person = random.randint(8000000, 18000000)
+            else:  # Domestic routes
                 price_per_person = random.randint(3000000, 12000000)
             
             # Revenue
@@ -206,11 +213,15 @@ class VietravelDataGenerator:
                     planned_customers = int(base_customers * seasonality)
                     
                     # Revenue plan
-                    if "Châu Âu" in business_unit:
+                    if route in ["Châu Âu", "Châu Mỹ"]:
                         avg_price = random.randint(50000000, 70000000)
-                    elif "Châu Á" in business_unit and route not in ["Bangkok - Pattaya", "Phuket - Krabi"]:
+                    elif route in ["Châu Úc", "Châu Phi"]:
+                        avg_price = random.randint(40000000, 55000000)
+                    elif route in ["Nhật Bản", "Hàn Quốc"]:
                         avg_price = random.randint(20000000, 30000000)
-                    else:
+                    elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                        avg_price = random.randint(10000000, 15000000)
+                    else:  # Domestic routes
                         avg_price = random.randint(5000000, 10000000)
                     
                     planned_revenue = planned_customers * avg_price
