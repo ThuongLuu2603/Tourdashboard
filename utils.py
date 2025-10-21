@@ -183,13 +183,13 @@ def create_bar_chart(data, x, y, title, orientation='v', color=None):
     if orientation == 'h':
         fig = px.bar(data, x=y, y=x, orientation='h', title=title, color=color,
                      color_discrete_sequence=px.colors.qualitative.Set2)
-        fig.update_xaxis(title="")
-        fig.update_yaxis(title="")
+        fig.update_xaxes(title="")
+        fig.update_yaxes(title="")
     else:
         fig = px.bar(data, x=x, y=y, title=title, color=color,
                      color_discrete_sequence=px.colors.qualitative.Set2)
-        fig.update_xaxis(title="")
-        fig.update_yaxis(title="")
+        fig.update_xaxes(title="")
+        fig.update_yaxes(title="")
     
     fig.update_layout(
         height=400,
@@ -221,8 +221,8 @@ def create_line_chart(data, x, y, title, color=None):
     fig = px.line(data, x=x, y=y, title=title, color=color,
                   markers=True, color_discrete_sequence=px.colors.qualitative.Set2)
     
-    fig.update_xaxis(title="")
-    fig.update_yaxis(title="")
+    fig.update_xaxes(title="")
+    fig.update_yaxes(title="")
     fig.update_layout(
         height=400,
         showlegend=True if color else False,
