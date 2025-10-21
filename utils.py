@@ -1,5 +1,7 @@
 """
 Utility functions for Vietravel Business Intelligence Dashboard
+
+CẬP NHẬT: Thêm np.where để xử lý lỗi chia cho 0 trong tính toán margin.
 """
 
 import pandas as pd
@@ -34,11 +36,14 @@ def format_percentage(value):
     """Format number as percentage"""
     if pd.isna(value):
         return "0%"
-    return f"{value:.1f}%"
+    # Sử dụng max(0, value) để tránh lỗi format khi giá trị là Inf hoặc NaN
+    # (Mặc dù np.where đã xử lý, nhưng đây là lớp bảo vệ cuối cùng)
+    return f"{max(0, value):.1f}%"
 
 
 def calculate_completion_rate(actual, planned):
     """Calculate completion rate percentage"""
+    # Hàm này đã có bảo vệ, giữ nguyên
     if planned == 0 or pd.isna(planned):
         return 0
     return (actual / planned) * 100
@@ -46,6 +51,7 @@ def calculate_completion_rate(actual, planned):
 
 def get_growth_rate(current, previous):
     """Calculate growth rate percentage"""
+    # Hàm này đã có bảo vệ, giữ nguyên
     if previous == 0 or pd.isna(previous):
         return 0
     return ((current - previous) / previous) * 100
@@ -66,15 +72,6 @@ def filter_confirmed_bookings(df):
 def calculate_kpis(tours_df, plans_df, start_date, end_date):
     """
     Calculate key performance indicators for the dashboard
-    
-    Args:
-        tours_df: DataFrame with tour bookings
-        plans_df: DataFrame with plans
-        start_date: Start date for calculation
-        end_date: End date for calculation
-        
-    Returns:
-        dict: Dictionary with calculated KPIs
     """
     # Filter data for current period
     current_data = filter_data_by_date(tours_df, start_date, end_date)
@@ -235,14 +232,6 @@ def create_line_chart(data, x, y, title, color=None):
 def get_top_routes(tours_df, n=10, metric='revenue'):
     """
     Get top N routes by specified metric
-    
-    Args:
-        tours_df: DataFrame with tour data
-        n: Number of top routes to return
-        metric: Metric to rank by ('revenue', 'customers', 'gross_profit')
-        
-    Returns:
-        DataFrame with top routes
     """
     confirmed = filter_confirmed_bookings(tours_df)
     
@@ -268,8 +257,12 @@ def get_top_routes(tours_df, n=10, metric='revenue'):
         }).reset_index()
         grouped = grouped.sort_values('gross_profit', ascending=False).head(n)
     
-    # Calculate profit margin
-    grouped['profit_margin'] = (grouped['gross_profit'] / grouped['revenue'] * 100).round(2)
+    # CẬP NHẬT: Thêm np.where để xử lý lỗi chia cho 0 hoặc NaN khi revenue = 0
+    grouped['profit_margin'] = np.where(
+        grouped['revenue'] > 0,
+        (grouped['gross_profit'] / grouped['revenue'] * 100).round(2),
+        0
+    )
     
     return grouped
 
@@ -277,28 +270,25 @@ def get_top_routes(tours_df, n=10, metric='revenue'):
 def calculate_operational_metrics(tours_df):
     """
     Calculate operational metrics
-    
-    Args:
-        tours_df: DataFrame with tour data
-        
-    Returns:
-        dict: Dictionary with operational metrics
     """
     # Average occupancy rate
     confirmed = filter_confirmed_bookings(tours_df)
     total_booked = confirmed['num_customers'].sum()
     total_capacity = confirmed['tour_capacity'].sum()
+    # Hàm này đã có bảo vệ chia cho 0
     avg_occupancy = (total_booked / total_capacity * 100) if total_capacity > 0 else 0
     
     # Cancellation/postponement rate
     total_bookings = len(tours_df)
     cancelled_postponed = len(tours_df[tours_df['status'].isin(['Đã hủy', 'Hoãn'])])
+    # Hàm này đã có bảo vệ chia cho 0
     cancel_rate = (cancelled_postponed / total_bookings * 100) if total_bookings > 0 else 0
     
     # Returning customer rate
     customer_counts = tours_df.groupby('customer_id').size()
     returning_customers = len(customer_counts[customer_counts >= 2])
     total_unique_customers = len(customer_counts)
+    # Hàm này đã có bảo vệ chia cho 0
     returning_rate = (returning_customers / total_unique_customers * 100) if total_unique_customers > 0 else 0
     
     return {
@@ -311,13 +301,6 @@ def calculate_operational_metrics(tours_df):
 def get_low_margin_tours(tours_df, threshold=5):
     """
     Get tours with profit margin below threshold
-    
-    Args:
-        tours_df: DataFrame with tour data
-        threshold: Profit margin threshold (default 5%)
-        
-    Returns:
-        DataFrame with low margin tours
     """
     confirmed = filter_confirmed_bookings(tours_df)
     
@@ -328,7 +311,12 @@ def get_low_margin_tours(tours_df, threshold=5):
         'num_customers': 'sum'
     }).reset_index()
     
-    route_margins['profit_margin'] = (route_margins['gross_profit'] / route_margins['revenue'] * 100)
+    # CẬP NHẬT: Thêm np.where để xử lý lỗi chia cho 0 hoặc NaN khi revenue = 0
+    route_margins['profit_margin'] = np.where(
+        route_margins['revenue'] > 0,
+        (route_margins['gross_profit'] / route_margins['revenue'] * 100),
+        0
+    )
     
     # Filter low margin routes
     low_margin = route_margins[route_margins['profit_margin'] < threshold].sort_values('profit_margin')
@@ -339,15 +327,6 @@ def get_low_margin_tours(tours_df, threshold=5):
 def get_unit_performance(tours_df, plans_df, start_date, end_date):
     """
     Calculate performance by business unit
-    
-    Args:
-        tours_df: DataFrame with tour data
-        plans_df: DataFrame with plans
-        start_date: Start date
-        end_date: End date
-        
-    Returns:
-        DataFrame with unit performance
     """
     # Filter current period data
     current_data = filter_data_by_date(tours_df, start_date, end_date)
@@ -378,8 +357,22 @@ def get_unit_performance(tours_df, plans_df, start_date, end_date):
     
     # Merge and calculate completion
     performance = actual_by_unit.merge(plan_by_unit, on='business_unit', how='left')
-    performance['revenue_completion'] = (performance['actual_revenue'] / performance['planned_revenue'] * 100)
-    performance['customer_completion'] = (performance['actual_customers'] / performance['planned_customers'] * 100)
-    performance['profit_margin'] = (performance['actual_profit'] / performance['actual_revenue'] * 100)
+    
+    # CẬP NHẬT: Thêm np.where để xử lý lỗi chia cho 0 hoặc NaN khi revenue = 0
+    performance['revenue_completion'] = np.where(
+        performance['planned_revenue'] > 0,
+        (performance['actual_revenue'] / performance['planned_revenue'] * 100),
+        0
+    )
+    performance['customer_completion'] = np.where(
+        performance['planned_customers'] > 0,
+        (performance['actual_customers'] / performance['planned_customers'] * 100),
+        0
+    )
+    performance['profit_margin'] = np.where(
+        performance['actual_revenue'] > 0,
+        (performance['actual_profit'] / performance['actual_revenue'] * 100),
+        0
+    )
     
     return performance
