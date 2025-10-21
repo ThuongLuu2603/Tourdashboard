@@ -13,8 +13,7 @@ import pytz
 
 
 # Import custom modules
-from data_generator import load_or_generate_data
-from data_generator import load_or_generate_data
+
 from utils import (
     format_currency, format_number, format_percentage,
     calculate_kpis, create_gauge_chart, create_bar_chart,
