@@ -9,8 +9,11 @@ import numpy as np
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
+import pytz
+
 
 # Import custom modules
+from data_generator import load_or_generate_data
 from data_generator import load_or_generate_data
 from utils import (
     format_currency, format_number, format_percentage,
@@ -25,58 +28,19 @@ st.set_page_config(
     page_title="Vietravel BI Dashboard",
     page_icon="✈️",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={'About': 'Phiên bản thử nghiệm'}
+    initial_sidebar_state="expanded"
 )
 
 # Initialize session state for data
-# Trong app.py, thay thế từ dòng 32 trở đi (khối if 'data_loaded' not in st.session_state:)
-
 if 'data_loaded' not in st.session_state:
     with st.spinner('Đang tải dữ liệu...'):
-        
-        # TẠM THỜI THAY THẾ load_or_generate_data() bằng dữ liệu giả đơn giản để kiểm tra khởi động
-        # Định nghĩa các DataFrame tối thiểu cần thiết để các hàm KPI và chart không bị crash
-        current_year = datetime.now().year
-        
-        tours_df = pd.DataFrame({
-            'booking_id': [f"BK{i:06d}" for i in range(1, 5)],
-            'customer_id': [f"KH{i:03d}" for i in range(1, 5)],
-            'booking_date': [datetime(current_year, 10, 15)] * 4,
-            'route': ['DH & ĐBSH', 'Thái Lan', 'Châu Âu', 'Phú Quốc'],
-            'business_unit': ['Miền Bắc', 'Trụ sở & ĐNB', 'Trụ sở & ĐNB', 'Miền Tây'],
-            'sales_channel': ['Online', 'Trực tiếp VPGD', 'Đại lý', 'Online'],
-            'num_customers': [5, 2, 8, 3],
-            'tour_capacity': [20, 25, 30, 15],
-            'price_per_person': [5000000, 10000000, 50000000, 6000000],
-            'revenue': [25000000, 20000000, 400000000, 18000000],
-            'cost': [20000000, 16000000, 320000000, 14000000],
-            'gross_profit': [5000000, 4000000, 80000000, 4000000],
-            'gross_profit_margin': [20.0, 20.0, 20.0, 22.22],
-            'status': ['Đã xác nhận', 'Đã xác nhận', 'Đã xác nhận', 'Đã xác nhận']
-        })
-        
-        plans_df = pd.DataFrame({
-            'year': [current_year] * 4,
-            'month': [10] * 4,
-            'business_unit': ['Miền Bắc', 'Trụ sở & ĐNB', 'Miền Tây', 'Miền Trung'],
-            'route': ['DH & ĐBSH', 'Thái Lan', 'Phú Quốc', 'Nam Trung Bộ'],
-            'planned_customers': [100, 50, 70, 60],
-            'planned_revenue': [500000000, 200000000, 300000000, 150000000],
-            'planned_gross_profit': [100000000, 40000000, 60000000, 30000000]
-        })
-        
-        # Dữ liệu lịch sử cho phép tính YoY
-        historical_df = tours_df.copy() 
-        historical_df['booking_date'] = historical_df['booking_date'] - timedelta(days=365)
-
-        # Lưu vào session state
+        tours_df, plans_df, historical_df = load_or_generate_data()
         st.session_state.tours_df = tours_df
         st.session_state.plans_df = plans_df
         st.session_state.historical_df = historical_df
         st.session_state.data_loaded = True
-        
-# Load data from session state (giữ nguyên các dòng tiếp theo)
+
+# Load data from session state
 tours_df = st.session_state.tours_df
 plans_df = st.session_state.plans_df
 historical_df = st.session_state.historical_df
@@ -98,7 +62,8 @@ with st.sidebar:
         ["Tháng này", "Tháng trước", "Quý này", "Năm nay", "Tùy chỉnh"]
     )
     
-    today = datetime.now()
+    vietnam_tz = pytz.timezone("Asia/Ho_Chi_Minh")
+    today = datetime.now(vietnam_tz).replace(tzinfo=None)
     
     if date_option == "Tháng này":
         start_date = datetime(today.year, today.month, 1)

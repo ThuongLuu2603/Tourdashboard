@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from faker import Faker
 import random
+import pytz
 
 # Initialize Faker with Vietnamese locale
 fake = Faker(['vi_VN'])
@@ -106,7 +107,7 @@ class VietravelDataGenerator:
             booking_date = fake.date_time_between(
                 start_date=start_date,
                 end_date=end_date
-            )
+            ).replace(tzinfo=None)
             
             # Tour route and related info
             route = random.choice(self.tour_routes)
