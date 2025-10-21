@@ -141,8 +141,8 @@ class VietravelDataGenerator:
             revenue = price_per_person * num_customers_in_booking
             
             # Cost (to calculate gross profit)
-            # Gross margin typically 15-30% for tours
-            cost_ratio = random.uniform(0.70, 0.85)
+            # Gross margin typically 5-15% for tours
+            cost_ratio = random.uniform(0.85, 0.95)
             cost = revenue * cost_ratio
             gross_profit = revenue - cost
             gross_profit_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
