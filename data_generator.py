@@ -1,197 +1,307 @@
 """
-Utility functions for Vietravel Business Intelligence Dashboard
+Data generator for Vietravel Business Intelligence Dashboard
+Generates realistic mock data for tour sales, customers, and operations
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import plotly.graph_objects as go
-import plotly.express as px
+from faker import Faker
+import random
+import pytz # Thêm pytz
 
+# Initialize Faker with Vietnamese locale
+fake = Faker(['vi_VN'])
 
-def format_currency(value):
-    """Format number as Vietnamese currency (VND)"""
-    if pd.isna(value) or value is None:
-        return "0 ₫"
+class VietravelDataGenerator:
+    """Generates realistic mock data for Vietravel tour business"""
     
-    # Convert to billions for readability if > 1 billion
-    if abs(value) >= 1_000_000_000:
-        return f"{value / 1_000_000_000:,.1f} tỷ ₫"
-    elif abs(value) >= 1_000_000:
-        return f"{value / 1_000_000:,.1f} triệu ₫"
-    else:
-        return f"{value:,.0f} ₫"
-
-
-def format_number(value):
-    """Format number with thousand separators"""
-    if pd.isna(value) or value is None:
-        return "0"
-    return f"{int(value):,}"
-
-
-def format_percentage(value):
-    """Format number as percentage"""
-    if pd.isna(value) or value is None:
-        return "0%"
-    # Giữ 1 chữ số thập phân, bảo vệ giá trị
-    return f"{max(0, value):.1f}%" 
-
-
-def calculate_completion_rate(actual, planned):
-    """Calculate completion rate percentage"""
-    if planned == 0 or pd.isna(planned) or planned is None:
-        return 0
-    return (actual / planned) * 100
-
-
-def get_growth_rate(current, previous):
-    """Calculate growth rate percentage"""
-    if previous == 0 or pd.isna(previous) or previous is None:
-        return 0
-    return ((current - previous) / previous) * 100
-
-
-def filter_data_by_date(df, start_date, end_date, date_column='booking_date'):
-    """Filter dataframe by date range"""
-    
-    # Kiểm tra df có rỗng không
-    if df.empty or date_column not in df.columns:
-        return pd.DataFrame(columns=df.columns)
+    def __init__(self, seed=42):
+        """Initialize the data generator with a seed for reproducibility"""
+        random.seed(seed)
+        np.random.seed(seed)
+        Faker.seed(seed)
         
-    mask = (df[date_column] >= pd.to_datetime(start_date)) & \
-           (df[date_column] <= pd.to_datetime(end_date))
-    return df[mask].copy()
+        # Define tour routes (tuyến tour)
+        self.tour_routes = [
+            "DH & ĐBSH",
+            "Nam Trung Bộ",
+            "Bắc Trung Bộ",
+            "Liên Tuyến miền Tây",
+            "Phú Quốc",
+            "Thái Lan",
+            "Trung Quốc",
+            "Hàn Quốc",
+            "Singapore - Malaysia",
+            "Nhật Bản",
+            "Châu Âu",
+            "Châu Mỹ",
+            "Châu Úc",
+            "Châu Phi",
+            "Tây Bắc",
+            "Đông Bắc",
+            "Tây Nguyên"
+        ]
+        
+        # Business units (đơn vị kinh doanh)
+        self.business_units = [
+            "Miền Trung",
+            "Miền Tây",
+            "Miền Bắc",
+            "Trụ sở & ĐNB"
+        ]
+        
+        # Sales channels (kênh bán)
+        self.sales_channels = [
+            "Online",
+            "Trực tiếp VPGD",
+            "Đại lý"
+        ]
+        
+        # Segments (phân khúc)
+        self.segments = [
+            "FIT",  # Free Independent Traveler
+            "GIT",  # Group Inclusive Tour
+            "Inbound"  # International visitors
+        ]
+        
+        # Map routes to business units
+        self.route_to_unit = {
+            "DH & ĐBSH": "Miền Bắc",
+            "Tây Nguyên": "Miền Tây",
+            "Bắc Trung Bộ": "Miền Trung",
+            "Phú Quốc": "Miền Tây",
+            "Liên Tuyến miền Tây": "Miền Tây",
+            "Nam Trung Bộ": "Miền Trung",
+            "Đông Bắc": "Miền Bắc",
+            "Tây Bắc": "Miền Bắc",
+            "Singapore - Malaysia": "Trụ sở & ĐNB",
+            "Hàn Quốc": "Trụ sở & ĐNB",
+            "Nhật Bản": "Trụ sở & ĐNB",
+            "Trung Quốc": "Trụ sở & ĐNB",
+            "Thái Lan": "Trụ sở & ĐNB",
+            "Châu Âu": "Trụ sở & ĐNB",
+            "Châu Mỹ": "Trụ sở & ĐNB",
+            "Châu Úc": "Trụ sở & ĐNB",
+            "Châu Phi": "Trụ sở & ĐNB"
+        }
+        
+        # Safety margin thresholds by route
+        self.safety_margins = {
+            route: random.uniform(4, 7) for route in self.tour_routes
+        }
+    
+    def generate_tour_data(self, start_date, end_date, num_tours=500):
+        """
+        Generate tour booking data
+        """
+        tours = []
+        
+        # Generate customer IDs to simulate returning customers
+        num_customers = int(num_tours * 0.7)  # 70% unique customers
+        customer_ids = [f"KH{i:06d}" for i in range(1, num_customers + 1)]
+        
+        for i in range(num_tours):
+            # Random booking date
+            # ĐÃ SỬA: Loại bỏ thông tin múi giờ
+            booking_date = fake.date_time_between(
+                start_date=start_date,
+                end_date=end_date
+            ).replace(tzinfo=None)
+            
+            # Tour route and related info
+            route = random.choice(self.tour_routes)
+            business_unit = self.route_to_unit[route]
+            
+            # Sales channel with realistic distribution
+            channel_weights = [0.35, 0.40, 0.25]  # Online, Direct, Agent
+            channel = random.choices(self.sales_channels, weights=channel_weights)[0]
+            
+            # Segment (phân khúc) based on route and group size
+            if route in ["Châu Âu", "Châu Mỹ", "Châu Úc", "Châu Phi", "Nhật Bản", "Hàn Quốc", 
+                        "Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                # International routes: more likely Inbound
+                segment_weights = [0.25, 0.35, 0.40]  # FIT, GIT, Inbound
+            else:
+                # Domestic routes: less Inbound
+                segment_weights = [0.35, 0.55, 0.10]  # FIT, GIT, Inbound
+            segment = random.choices(self.segments, weights=segment_weights)[0]
+            
+            # Number of customers (group size)
+            if random.random() < 0.3:  # 30% individual/couple
+                num_customers_in_booking = random.randint(1, 2)
+            else:  # 70% groups
+                num_customers_in_booking = random.randint(3, 15)
+            
+            # Tour capacity
+            tour_capacity = random.choice([20, 25, 30, 35, 40, 45])
+            
+            # Price per person (depends on route)
+            if route in ["Châu Âu", "Châu Mỹ"]:
+                price_per_person = random.randint(45000000, 75000000)
+            elif route in ["Châu Úc", "Châu Phi"]:
+                price_per_person = random.randint(35000000, 60000000)
+            elif route in ["Nhật Bản", "Hàn Quốc"]:
+                price_per_person = random.randint(15000000, 35000000)
+            elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                price_per_person = random.randint(8000000, 18000000)
+            else:  # Domestic routes
+                price_per_person = random.randint(3000000, 12000000)
+            
+            # Revenue
+            revenue = price_per_person * num_customers_in_booking
+            
+            # Cost (to calculate gross profit)
+            cost_ratio = random.uniform(0.85, 0.95)
+            cost = revenue * cost_ratio
+            gross_profit = revenue - cost
+            gross_profit_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
+            
+            # Status (booking status)
+            status_weights = [0.75, 0.15, 0.10]  # Confirmed, Cancelled, Postponed
+            status = random.choices(["Đã xác nhận", "Đã hủy", "Hoãn"], weights=status_weights)[0]
+            
+            # Customer ID (some customers book multiple times)
+            if random.random() < 0.25:  # 25% chance of returning customer
+                customer_id = random.choice(customer_ids[:int(len(customer_ids) * 0.3)])
+            else:
+                customer_id = random.choice(customer_ids)
+            
+            # Marketing and sales costs (OPEX)
+            if channel == "Online":
+                marketing_cost = revenue * random.uniform(0.02, 0.05)
+            else:
+                marketing_cost = revenue * random.uniform(0.01, 0.03)
+            
+            if channel == "Online":
+                sales_cost = revenue * random.uniform(0.01, 0.02)
+            elif channel == "Trực tiếp VPGD":
+                sales_cost = revenue * random.uniform(0.02, 0.04)
+            else:  # Đại lý
+                sales_cost = revenue * random.uniform(0.05, 0.08)
+            
+            opex = marketing_cost + sales_cost
+            
+            tours.append({
+                'booking_id': f"BK{i+1:06d}",
+                'customer_id': customer_id,
+                'booking_date': booking_date,
+                'route': route,
+                'business_unit': business_unit,
+                'sales_channel': channel,
+                'segment': segment,
+                'num_customers': num_customers_in_booking,
+                'tour_capacity': tour_capacity,
+                'price_per_person': price_per_person,
+                'revenue': revenue,
+                'cost': cost,
+                'gross_profit': gross_profit,
+                'gross_profit_margin': gross_profit_margin,
+                'status': status,
+                'marketing_cost': marketing_cost,
+                'sales_cost': sales_cost,
+                'opex': opex
+            })
+        
+        return pd.DataFrame(tours)
+    
+    def generate_plan_data(self, year, month=None):
+        """
+        Generate monthly or yearly plan data
+        """
+        plans = []
+        
+        if month:
+            periods = [(year, month)]
+        else:
+            periods = [(year, m) for m in range(1, 13)]
+        
+        for year, month in periods:
+            for business_unit in self.business_units:
+                # Get routes for this business unit
+                unit_routes = [r for r, u in self.route_to_unit.items() if u == business_unit]
+                
+                for route in unit_routes:
+                    for segment in self.segments:
+                        # Seasonality factor
+                        if month in [1, 2, 4, 7, 8, 12]:  # Peak months
+                            seasonality = random.uniform(1.2, 1.5)
+                        elif month in [3, 9, 10]:  # Medium months
+                            seasonality = random.uniform(0.9, 1.1)
+                        else:  # Low months
+                            seasonality = random.uniform(0.7, 0.9)
+                        
+                        # Base plan values (distributed by segment)
+                        base_customers = random.randint(15, 70)  # Lower per segment
+                        planned_customers = int(base_customers * seasonality)
+                        
+                        # Revenue plan
+                        if route in ["Châu Âu", "Châu Mỹ"]:
+                            avg_price = random.randint(50000000, 70000000)
+                        elif route in ["Châu Úc", "Châu Phi"]:
+                            avg_price = random.randint(40000000, 55000000)
+                        elif route in ["Nhật Bản", "Hàn Quốc"]:
+                            avg_price = random.randint(20000000, 30000000)
+                        elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                            avg_price = random.randint(10000000, 15000000)
+                        else:  # Domestic routes
+                            avg_price = random.randint(5000000, 10000000)
+                        
+                        planned_revenue = planned_customers * avg_price
+                        
+                        # Gross profit plan (20% margin)
+                        planned_gross_profit = planned_revenue * 0.20
+                        
+                        plans.append({
+                            'year': year,
+                            'month': month,
+                            'business_unit': business_unit,
+                            'route': route,
+                            'segment': segment,
+                            'planned_customers': planned_customers,
+                            'planned_revenue': planned_revenue,
+                            'planned_gross_profit': planned_gross_profit
+                        })
+        
+        return pd.DataFrame(plans)
+    
+    def generate_historical_data(self, current_date, lookback_years=2):
+        """
+        Generate historical data for year-over-year comparison
+        """
+        all_data = []
+        
+        for year_offset in range(lookback_years + 1):
+            year_start = datetime(current_date.year - year_offset, 1, 1)
+            year_end = datetime(current_date.year - year_offset, 12, 31)
+            
+            # Generate tours for this year
+            num_tours = random.randint(400, 600)
+            yearly_data = self.generate_tour_data(year_start, year_end, num_tours)
+            all_data.append(yearly_data)
+        
+        return pd.concat(all_data, ignore_index=True)
 
 
-def filter_confirmed_bookings(df):
-    """Filter only confirmed bookings (exclude cancelled/postponed)"""
-    if 'status' not in df.columns:
-        return pd.DataFrame(columns=df.columns)
-    return df[df['status'] == 'Đã xác nhận'].copy()
-
-
-def calculate_kpis(tours_df, plans_df, start_date, end_date):
+def load_or_generate_data():
     """
-    Calculate key performance indicators for the dashboard
+    Load or generate data for the dashboard
     """
-    # Filter data for current period
-    current_data = filter_data_by_date(tours_df, start_date, end_date)
-    confirmed_data = filter_confirmed_bookings(current_data)
+    generator = VietravelDataGenerator()
     
-    # Calculate actual metrics
-    actual_revenue = confirmed_data['revenue'].sum()
-    actual_gross_profit = confirmed_data['gross_profit'].sum()
-    actual_customers = confirmed_data['num_customers'].sum()
+    # Current date
+    current_date = datetime.now()
+    current_year = current_date.year
     
-    # Filter plans for the same period
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
+    # Generate current year data
+    year_start = datetime(current_year, 1, 1)
+    year_end = current_date
+    tours_df = generator.generate_tour_data(year_start, year_end, num_tours=500)
     
-    plan_mask = (plans_df['year'] == start_dt.year) & \
-                (plans_df['month'].between(start_dt.month, end_dt.month)) # Đã sửa: dùng .between
-    period_plans = plans_df[plan_mask]
+    # Generate plan data for current year
+    plans_df = generator.generate_plan_data(current_year)
     
-    planned_revenue = period_plans['planned_revenue'].sum()
-    planned_gross_profit = period_plans['planned_gross_profit'].sum()
-    planned_customers = period_plans['planned_customers'].sum()
+    # Generate historical data (including last year for YoY comparison)
+    historical_df = generator.generate_historical_data(current_date, lookback_years=2)
     
-    # Calculate same period last year
-    last_year_start = start_dt - timedelta(days=365)
-    last_year_end = end_dt - timedelta(days=365)
-    last_year_data = filter_data_by_date(tours_df, last_year_start, last_year_end)
-    last_year_confirmed = filter_confirmed_bookings(last_year_data)
-    
-    ly_revenue = last_year_confirmed['revenue'].sum()
-    ly_gross_profit = last_year_confirmed['gross_profit'].sum()
-    ly_customers = last_year_confirmed['num_customers'].sum()
-    
-    # Completion rates
-    revenue_completion = calculate_completion_rate(actual_revenue, planned_revenue)
-    customer_completion = calculate_completion_rate(actual_customers, planned_customers)
-    
-    # Growth rates
-    revenue_growth = get_growth_rate(actual_revenue, ly_revenue)
-    profit_growth = get_growth_rate(actual_gross_profit, ly_gross_profit)
-    customer_growth = get_growth_rate(actual_customers, ly_customers)
-    
-    return {
-        'actual_revenue': actual_revenue,
-        'actual_gross_profit': actual_gross_profit,
-        'actual_customers': actual_customers,
-        'planned_revenue': planned_revenue,
-        'planned_gross_profit': planned_gross_profit,
-        'planned_customers': planned_customers,
-        'ly_revenue': ly_revenue,
-        'ly_gross_profit': ly_gross_profit,
-        'ly_customers': ly_customers,
-        'revenue_completion': revenue_completion,
-        'customer_completion': customer_completion,
-        'revenue_growth': revenue_growth,
-        'profit_growth': profit_growth,
-        'customer_growth': customer_growth
-    }
-
-# ... (các hàm khác)
-
-def get_route_detailed_table(tours_df, plans_df, start_date, end_date):
-    """Calculates detailed route performance metrics."""
-    current_data = filter_data_by_date(tours_df, start_date, end_date)
-    confirmed_data = filter_confirmed_bookings(current_data)
-
-    if confirmed_data.empty: 
-        return pd.DataFrame(columns=['route', 'revenue', 'num_customers', 'gross_profit', 'profit_margin', 'planned_revenue', 'revenue_completion'])
-
-    actual_by_route = confirmed_data.groupby('route').agg(
-        revenue=('revenue', 'sum'),
-        num_customers=('num_customers', 'sum'),
-        gross_profit=('gross_profit', 'sum')
-    ).reset_index()
-
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
-    plan_mask = (plans_df['year'] == start_dt.year) & (plans_df['month'].between(start_dt.month, end_dt.month))
-    period_plans = plans_df[plan_mask]
-    
-    plan_by_route = period_plans.groupby('route').agg(
-        planned_revenue=('planned_revenue', 'sum')
-    ).reset_index()
-
-    table = actual_by_route.merge(plan_by_route, on='route', how='left').fillna(0)
-    
-    table['profit_margin'] = np.where(table['revenue'] > 0, (table['gross_profit'] / table['revenue'] * 100), 0)
-    table['revenue_completion'] = np.where(table['planned_revenue'] > 0, (table['revenue'] / table['planned_revenue'] * 100), 0)
-
-    return table
-
-def get_unit_detailed_table(tours_df, plans_df, start_date, end_date):
-    """Calculates detailed business unit performance metrics."""
-    current_data = filter_data_by_date(tours_df, start_date, end_date)
-    confirmed_data = filter_confirmed_bookings(current_data)
-
-    if confirmed_data.empty: 
-        return pd.DataFrame(columns=['business_unit', 'revenue', 'num_customers', 'gross_profit', 'profit_margin', 'avg_revenue_per_customer'])
-
-    actual_by_unit = confirmed_data.groupby('business_unit').agg(
-        revenue=('revenue', 'sum'),
-        num_customers=('num_customers', 'sum'),
-        gross_profit=('gross_profit', 'sum')
-    ).reset_index()
-
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
-    plan_mask = (plans_df['year'] == start_dt.year) & (plans_df['month'].between(start_dt.month, end_dt.month))
-    period_plans = plans_df[plan_mask]
-    
-    plan_by_unit = period_plans.groupby('business_unit').agg(
-        planned_revenue=('planned_revenue', 'sum')
-    ).reset_index()
-
-    table = actual_by_unit.merge(plan_by_unit, on='business_unit', how='left').fillna(0)
-    
-    table['profit_margin'] = np.where(table['revenue'] > 0, (table['gross_profit'] / table['revenue'] * 100), 0)
-    table['avg_revenue_per_customer'] = np.where(table['num_customers'] > 0, (table['revenue'] / table['num_customers']), 0)
-    
-    return table
-
-# ... (Vui lòng tham khảo code utils.py đầy đủ ở phần trước. Tôi chỉ hiển thị các hàm đã sửa lỗi)
+    return tours_df, plans_df, historical_df
