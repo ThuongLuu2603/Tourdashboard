@@ -14,21 +14,26 @@ import plotly.express as px
 # Import custom modules
 from data_generator import load_or_generate_data
 from utils import (
+    # Các hàm Format và Core Logic
     format_currency, format_number, format_percentage,
-    calculate_kpis, get_growth_rate, filter_data_by_date, filter_confirmed_bookings,
-    get_top_routes, calculate_operational_metrics, get_low_margin_tours,
-    get_unit_performance, calculate_completion_rate, # Đã thêm calculate_completion_rate vì nó được dùng trong app.py
+    calculate_completion_rate, get_growth_rate, filter_data_by_date, filter_confirmed_bookings,
     
-    # Các hàm Chart: kiểm tra tên hàm trong utils.py
-    create_gauge_chart, 
-    create_bar_chart,
-    create_pie_chart, 
-    create_line_chart,
+    # Các hàm KPI và Chart
+    calculate_kpis, 
+    create_gauge_chart, create_bar_chart, create_pie_chart, create_line_chart,
     
-    # Các hàm chi tiết mới/cũ (nếu bạn đã định nghĩa lại chúng trong utils.py)
-    # Nếu utils.py của bạn không có các hàm này, hãy giữ nguyên dòng import
-    get_route_detailed_table, 
-    get_unit_detailed_table
+    # Các hàm Top/Breakdown
+    get_top_routes, get_route_unit_breakdown, get_unit_breakdown,
+    get_segment_breakdown, get_segment_unit_breakdown, get_channel_breakdown,
+    
+    # Các hàm Operational và Detailed Tables
+    calculate_operational_metrics, get_low_margin_tours, get_unit_performance, 
+    get_route_detailed_table, get_unit_detailed_table,
+    
+    # Các hàm Marketing/CLV/Forecast
+    create_forecast_chart, create_trend_chart, 
+    calculate_marketing_metrics, calculate_cac_by_channel, calculate_clv_by_segment, 
+    create_profit_margin_chart_with_color
 )
 
 # Page configuration
@@ -64,7 +69,7 @@ st.markdown("""
 # Initialize session state for data
 if 'data_loaded' not in st.session_state:
     with st.spinner('Đang tải dữ liệu...'):
-        # ĐÃ KHÔI PHỤC LẠI LỆNH GỌI DATA GENERATOR
+        # KHÔI PHỤC LẠI LỆNH GỌI DATA GENERATOR
         tours_df, plans_df, historical_df = load_or_generate_data()
         st.session_state.tours_df = tours_df
         st.session_state.plans_df = plans_df
@@ -148,7 +153,7 @@ with st.sidebar:
     
     # Segment filter
     st.subheader("Phân khúc")
-    segments = ["Tất cả", "FIT", "GIT", "Inbound"]
+    segments = ["Tất cả"] + sorted(tours_df['segment'].unique().tolist())
     selected_segment = st.selectbox("Chọn phân khúc", segments)
     
     # Top N selector
