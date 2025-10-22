@@ -319,6 +319,7 @@ with tab1:
     
     # ========== VÙNG 3: PHÂN THEO PHÂN KHÚC ==========
     st.markdown("### Vùng 3: Phân theo Phân khúc (FIT / GIT / Inbound)")
+    SEGMENT_COLORS = ['#3CB371', '#6495ED', '#FFA07A']
     
     # Row: 3 Pie charts for segments
     col1, col2, col3 = st.columns(3)
@@ -356,7 +357,7 @@ with tab1:
                              '<b>Theo đơn vị:</b><br>' +
                              '%{customdata}' + 
                              '<extra></extra>',
-                marker=dict(colors=px.colors.sequential.Plotly3) 
+                marker=dict(colors=SEGMENT_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
@@ -388,7 +389,7 @@ with tab1:
                              '<b>Theo đơn vị:</b><br>' +
                              '%{customdata}' +
                              '<extra></extra>',
-                marker=dict(colors=px.colors.sequential.Plotly3)
+                marker=dict(colors=SEGMENT_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
@@ -420,7 +421,7 @@ with tab1:
                              '<b>Theo đơn vị:</b><br>' +
                              '%{customdata}' +
                              '<extra></extra>',
-                marker=dict(colors=px.colors.sequential.Plotly3)
+                marker=dict(colors=SEGMENT_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
