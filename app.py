@@ -14,21 +14,21 @@ import plotly.express as px
 # Import custom modules
 from data_generator import load_or_generate_data
 from utils import (
-    # Các hàm KPI và Chart cơ bản:
     format_currency, format_number, format_percentage,
-    calculate_kpis, create_gauge_chart, create_bar_chart,
-    create_pie_chart, create_line_chart, get_top_routes,
+    calculate_kpis, get_growth_rate, filter_data_by_date, filter_confirmed_bookings,
+    get_top_routes, calculate_operational_metrics, get_low_margin_tours,
+    get_unit_performance, calculate_completion_rate, # Đã thêm calculate_completion_rate vì nó được dùng trong app.py
     
-    # Các hàm Operational và Detailed Table đã được định nghĩa trong utils.py mới:
-    calculate_operational_metrics, get_low_margin_tours,
-    get_unit_performance, filter_data_by_date, filter_confirmed_bookings,
-    get_route_detailed_table, get_unit_detailed_table,
+    # Các hàm Chart: kiểm tra tên hàm trong utils.py
+    create_gauge_chart, 
+    create_bar_chart,
+    create_pie_chart, 
+    create_line_chart,
     
-    # Các hàm Marketing & Segment đã được định nghĩa trong utils.py mới:
-    get_segment_breakdown, calculate_marketing_metrics, 
-    calculate_cac_by_channel, calculate_clv_by_segment, 
-    get_channel_breakdown, create_profit_margin_chart_with_color,
-    create_trend_chart, create_forecast_chart
+    # Các hàm chi tiết mới/cũ (nếu bạn đã định nghĩa lại chúng trong utils.py)
+    # Nếu utils.py của bạn không có các hàm này, hãy giữ nguyên dòng import
+    get_route_detailed_table, 
+    get_unit_detailed_table
 )
 
 # Page configuration
