@@ -149,7 +149,11 @@ def create_gauge_chart(value, title, max_value=150, threshold=100, unit_breakdow
         value = value,
         domain = {'x': [0, 1], 'y': [0, 1]},
         title = {'text': title, 'font': {'size': 11}},
-        number = {'suffix': "%", 'font': {'size': 20}},
+        number = {
+            'suffix': "%", 
+            'font': {'size': 20}
+            # ĐÃ XÓA 'align' để tránh ValueError
+        },
         gauge = {
             'axis': {'range': [None, max_value], 'ticksuffix': "%", 'tickfont': {'size': 9}},
             'bar': {'color': color},
@@ -289,7 +293,7 @@ def get_top_routes(tours_df, n=10, metric='revenue'):
 
 def get_route_unit_breakdown(tours_df, route_name, metric='revenue'):
     """
-    Get breakdown by business unit for a specific route
+    Get breakdown by business unit for a specific route and metric
     """
     confirmed = filter_confirmed_bookings(tours_df)
     route_data = confirmed[confirmed['route'] == route_name]
@@ -313,10 +317,10 @@ def get_route_unit_breakdown(tours_df, route_name, metric='revenue'):
         total_value = unit_breakdown['gross_profit'].sum()
         col_name = 'gross_profit'
     
-    # ĐÃ SỬA: Bảo vệ chia cho 0
+    # SỬA LỖI LOGIC: Phải dùng col_name để tính tỷ trọng, không phải luôn là 'revenue'
     unit_breakdown['percentage'] = np.where(
         total_value > 0,
-        (unit_breakdown['revenue'] / total_value * 100).round(1),
+        (unit_breakdown[col_name] / total_value * 100).round(1), # ĐÃ SỬA: Dùng col_name
         0
     )
     unit_breakdown = unit_breakdown.sort_values(col_name, ascending=False)
@@ -1113,4 +1117,4 @@ def get_unit_breakdown_simple(tours_df, metric='revenue'):
     )
     unit_data = unit_data.sort_values('value', ascending=False)
     
-    return unit_data    
+    return unit_data
