@@ -25,6 +25,7 @@ from utils import (
     # Các hàm Top/Breakdown
     get_top_routes, get_route_unit_breakdown, get_unit_breakdown,
     get_segment_breakdown, get_segment_unit_breakdown, get_channel_breakdown,
+    get_unit_breakdown_simple,
     
     # Các hàm Operational và Detailed Tables
     calculate_operational_metrics, get_low_margin_tours, get_unit_performance, 
@@ -202,8 +203,90 @@ tab1, tab2 = st.tabs([
 # TAB 1: TỔNG QUAN (5 VÙNG THEO SPEC)
 # ============================================================
 with tab1:
-    # ========== VÙNG 1: CHỈ SỐ TỔNG QUAN ==========
-    st.markdown("###  Vùng 1: Chỉ số Tổng quan")
+    # ========== VÙNG 1: TỐC ĐỘ ĐẠT KẾ HOẠCH ==========
+    st.markdown("### Vùng 1: Tốc độ đạt Kế hoạch")
+    
+    # Row: 3 Gauge charts + 1 Forecast chart
+    col1, col2, col3 = st.columns(3)
+    
+    # Get unit breakdown data for hover tooltips
+    revenue_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='revenue')
+    profit_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='profit')
+    customers_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='customers')
+    
+    with col1:
+        fig_revenue = create_gauge_chart(
+            kpis['revenue_completion'],
+            "Đạt KH Doanh thu",
+            unit_breakdown=revenue_breakdown
+        )
+        st.plotly_chart(fig_revenue, use_container_width=True)
+    
+    with col2:
+        profit_completion = calculate_completion_rate(kpis['actual_gross_profit'], kpis['planned_gross_profit'])
+        fig_profit = create_gauge_chart(
+            profit_completion,
+            "Đạt KH Lợi nhuận",
+            unit_breakdown=profit_breakdown
+        )
+        st.plotly_chart(fig_profit, use_container_width=True)
+    
+    with col3:
+        fig_customers = create_gauge_chart(
+            kpis['customer_completion'],
+            "Đạt KH Lượt khách",
+            unit_breakdown=customers_breakdown
+        )
+        st.plotly_chart(fig_customers, use_container_width=True)
+    
+# ========== BIỂU ĐỒ DỰ BÁO HOÀN THÀNH KẾ HOẠCH (SỬA LỖI 4 ĐỐI SỐ) ==========
+# Hàng 2: Tiến độ KH theo Khu vực (1 cột) | Dự báo Hoàn thành KH (2 cột)
+    st.markdown("#### Phân tích Tiến độ & Dự báo")
+    col1, col2 = st.columns([1, 2]) # Tỉ lệ 1:2
+    
+    # Lấy dữ liệu cần thiết cho Hàng 2
+    unit_performance = get_unit_performance(tours_filtered_dimensional, filtered_plans, start_date, end_date)
+    
+    with col1:
+        st.markdown("##### 📊 Tiến độ KH theo Khu vực")
+        if not unit_performance.empty:
+            fig = go.Figure()
+            colors = ['#00CC96' if x >= 100 else '#FFA500' if x >= 80 else '#EF553B' 
+                        for x in unit_performance['revenue_completion']]
+            customdata = [[row['actual_revenue'], row['planned_revenue'], row['revenue_completion']]
+                          for _, row in unit_performance.iterrows()]
+            fig.add_trace(go.Bar(
+                x=unit_performance['business_unit'],
+                y=unit_performance['revenue_completion'],
+                text=[f"{v:.1f}%" for v in unit_performance['revenue_completion']],
+                textposition='outside',
+                marker_color=colors,
+                customdata=customdata,
+                hovertemplate='<b>%{x}</b><br>DT thực hiện: %{customdata[0]:,.0f} ₫<br>DT kế hoạch: %{customdata[1]:,.0f} ₫<br>Tiến độ: %{customdata[2]:.1f}%<extra></extra>'
+            ))
+            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="KH 100%")
+            fig.update_layout(xaxis_title="", yaxis_title="Tiến độ (%)", height=300, showlegend=False, margin=dict(l=30, r=30, t=10, b=30))
+            st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu tiến độ cho khu vực kinh doanh được chọn.")
+    
+    with col2:
+        st.markdown("##### 📈 Dự báo Hoàn thành Kế hoạch")
+        fig_forecast = create_forecast_chart(
+            filtered_tours, 
+            filtered_plans, 
+            start_date, 
+            end_date,
+            date_option
+        )
+        st.plotly_chart(fig_forecast, use_container_width=True)
+    
+    st.markdown("---")
+    
+
+
+    # ========== VÙNG 2: CHỈ SỐ TỔNG QUAN ==========
+    st.markdown("###  Vùng 2: Các Chỉ số")
     
     # Row 1: 3 KPI Cards 
     col1, col2, col3 = st.columns(3)
@@ -274,54 +357,16 @@ with tab1:
     
     st.markdown("---")
     
-    # ========== VÙNG 2: TỐC ĐỘ ĐẠT KẾ HOẠCH ==========
-    st.markdown("### Vùng 2: Tốc độ đạt Kế hoạch")
     
-    # Row: 3 Gauge charts + 1 Forecast chart
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # Get unit breakdown data for hover tooltips
-    revenue_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='revenue')
-    profit_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='profit')
-    customers_breakdown = get_unit_breakdown(filtered_tours, filtered_plans, start_date, end_date, metric='customers')
-    
-    with col1:
-        fig_revenue = create_gauge_chart(
-            kpis['revenue_completion'],
-            "Đạt KH Doanh thu",
-            unit_breakdown=revenue_breakdown
-        )
-        st.plotly_chart(fig_revenue, use_container_width=True)
-    
-    with col2:
-        profit_completion = calculate_completion_rate(kpis['actual_gross_profit'], kpis['planned_gross_profit'])
-        fig_profit = create_gauge_chart(
-            profit_completion,
-            "Đạt KH Lợi nhuận",
-            unit_breakdown=profit_breakdown
-        )
-        st.plotly_chart(fig_profit, use_container_width=True)
-    
-    with col3:
-        fig_customers = create_gauge_chart(
-            kpis['customer_completion'],
-            "Đạt KH Lượt khách",
-            unit_breakdown=customers_breakdown
-        )
-        st.plotly_chart(fig_customers, use_container_width=True)
-    
-    with col4:
-        st.markdown("<div style='font-size: 11px; font-weight: bold; text-align: center; margin-bottom: 5px;'>Dự báo hoàn thành KH</div>", unsafe_allow_html=True)
-        fig_forecast = create_forecast_chart(filtered_tours, filtered_plans, start_date, end_date)
-        st.plotly_chart(fig_forecast, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # ========== VÙNG 3: PHÂN THEO PHÂN KHÚC ==========
-    st.markdown("### Vùng 3: Phân theo Phân khúc (FIT / GIT / Inbound)")
+# ========== VÙNG 3: PHÂN THEO PHÂN KHÚC & ĐƠN VỊ KINH DOANH ==========
+    st.markdown("### Vùng 3: Phân theo Phân khúc & Đơn vị Kinh doanh")
     SEGMENT_COLORS = ['#3CB371', '#6495ED', '#FFA07A']
+    BU_COLORS = ['#3CB371', '#6495ED', '#FFA07A', '#FF6347']
     
-    # Row: 3 Pie charts for segments
+    # ----------------------------------------------------
+    # PHẦN 1: PHÂN KHÚC (GIỮ NGUYÊN LOGIC)
+    # ----------------------------------------------------
+    st.markdown("#### Phân bổ theo Phân khúc (FIT / GIT / Inbound)")
     col1, col2, col3 = st.columns(3)
     
     # Get segment breakdown data
@@ -330,14 +375,13 @@ with tab1:
     segment_profit = get_segment_breakdown(filtered_tours, start_date, end_date, metric='profit')
     
     with col1:
-        st.markdown("#### 💰 Doanh thu theo phân khúc")
+        st.markdown("##### 💰 Doanh thu theo phân khúc")
         if not segment_revenue.empty:
-            # Prepare hover with unit breakdown
+            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
             hovertext = []
             for seg in segment_revenue['segment']:
                 unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'revenue')
                 if not unit_breakdown.empty:
-                    # Chuyển đổi sang format tiền tệ cho hover
                     breakdown_text = "<br>".join([
                         f"{row['business_unit']}: {format_currency(row['value'])} ({row['percentage']:.1f}%)"
                         for _, row in unit_breakdown.iterrows()
@@ -352,20 +396,20 @@ with tab1:
                 textinfo='label+percent',
                 customdata=hovertext,
                 hovertemplate='<b>%{label}</b><br>' +
-                             'Doanh thu: %{value:,.0f} ₫<br>' +
-                             'Tỉ lệ: %{percent}<br><br>' +
-                             '<b>Theo đơn vị:</b><br>' +
-                             '%{customdata}' + 
-                             '<extra></extra>',
+                              'Doanh thu: %{value:,.0f} ₫<br>' +
+                              'Tỉ lệ: %{percent}<br><br>' +
+                              '<b>Theo đơn vị:</b><br>' +
+                              '%{customdata}' + 
+                              '<extra></extra>',
                 marker=dict(colors=SEGMENT_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
     
     with col2:
-        st.markdown("#### 👥 Lượt khách theo phân khúc")
+        st.markdown("##### 👥 Lượt khách theo phân khúc")
         if not segment_customers.empty:
-            # Prepare hover with unit breakdown
+            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
             hovertext = []
             for seg in segment_customers['segment']:
                 unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'customers')
@@ -384,20 +428,20 @@ with tab1:
                 textinfo='label+percent',
                 customdata=hovertext,
                 hovertemplate='<b>%{label}</b><br>' +
-                             'Lượt khách: %{value:,.0f}<br>' +
-                             'Tỉ lệ: %{percent}<br><br>' +
-                             '<b>Theo đơn vị:</b><br>' +
-                             '%{customdata}' +
-                             '<extra></extra>',
+                              'Lượt khách: %{value:,.0f}<br>' +
+                              'Tỉ lệ: %{percent}<br><br>' +
+                              '<b>Theo đơn vị:</b><br>' +
+                              '%{customdata}' +
+                              '<extra></extra>',
                 marker=dict(colors=SEGMENT_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
     
     with col3:
-        st.markdown("#### 💵 Lợi nhuận theo phân khúc")
+        st.markdown("##### 💵 Lợi nhuận theo phân khúc")
         if not segment_profit.empty:
-            # Prepare hover with unit breakdown
+            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
             hovertext = []
             for seg in segment_profit['segment']:
                 unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'profit')
@@ -416,51 +460,82 @@ with tab1:
                 textinfo='label+percent',
                 customdata=hovertext,
                 hovertemplate='<b>%{label}</b><br>' +
-                             'Lợi nhuận: %{value:,.0f} ₫<br>' +
-                             'Tỉ lệ: %{percent}<br><br>' +
-                             '<b>Theo đơn vị:</b><br>' +
-                             '%{customdata}' +
-                             '<extra></extra>',
+                              'Lợi nhuận: %{value:,.0f} ₫<br>' +
+                              'Tỉ lệ: %{percent}<br><br>' +
+                              '<b>Theo đơn vị:</b><br>' +
+                              '%{customdata}' +
+                              '<extra></extra>',
                 marker=dict(colors=SEGMENT_COLORS)
+            ))
+            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig)
+
+
+    # ----------------------------------------------------
+    # PHẦN 2: PHÂN BỔ THEO ĐƠN VỊ KINH DOANH (ĐÃ THÊM)
+    # ----------------------------------------------------
+    st.markdown("#### Phân bổ theo Khu vực Đơn vị Kinh doanh")
+    col1, col2, col3 = st.columns(3)
+    
+    # Lấy dữ liệu phân bổ theo Đơn vị Kinh doanh (CẦN get_unit_breakdown_simple trong utils.py)
+    bu_revenue = get_unit_breakdown_simple(filtered_tours, metric='revenue')
+    bu_customers = get_unit_breakdown_simple(filtered_tours, metric='customers')
+    bu_profit = get_unit_breakdown_simple(filtered_tours, metric='profit')
+    
+    with col1:
+        st.markdown("##### 💰 Doanh thu theo Khu vực")
+        if not bu_revenue.empty:
+            fig = go.Figure(go.Pie(
+                labels=bu_revenue['business_unit'],
+                values=bu_revenue['value'],
+                textinfo='label+percent',
+                hovertemplate='<b>%{label}</b><br>Doanh thu: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<extra></extra>',
+                marker=dict(colors=BU_COLORS)
+            ))
+            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig)
+            
+    with col2:
+        st.markdown("##### 👥 Lượt khách theo Khu vực")
+        if not bu_customers.empty:
+            fig = go.Figure(go.Pie(
+                labels=bu_customers['business_unit'],
+                values=bu_customers['value'],
+                textinfo='label+percent',
+                hovertemplate='<b>%{label}</b><br>Lượt khách: %{value:,.0f}<br>Tỉ lệ: %{percent}<extra></extra>',
+                marker=dict(colors=BU_COLORS)
+            ))
+            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig)
+            
+    with col3:
+        st.markdown("##### 💵 Lợi nhuận theo Khu vực")
+        if not bu_profit.empty:
+            fig = go.Figure(go.Pie(
+                labels=bu_profit['business_unit'],
+                values=bu_profit['value'],
+                textinfo='label+percent',
+                hovertemplate='<b>%{label}</b><br>Lợi nhuận: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<extra></extra>',
+                marker=dict(colors=BU_COLORS)
             ))
             fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
     
     st.markdown("---")
     
-    # ========== VÙNG 4: CÁC BẢNG THÔNG TIN KHÁC ==========
+# ========== VÙNG 4: CÁC BẢNG THÔNG TIN KHÁC ==========
     st.markdown("### Vùng 4: Các bảng thông tin khác")
     
-    # Prepare data
-    unit_performance = get_unit_performance(tours_filtered_dimensional, filtered_plans, start_date, end_date)
+    # Chuẩn bị dữ liệu cho cả 3 chỉ số
     top_revenue = get_top_routes(filtered_tours, n=10, metric='revenue')
+    top_customers = get_top_routes(filtered_tours, n=10, metric='customers')
+    top_profit = get_top_routes(filtered_tours, n=10, metric='profit')
     
-    # Row: 3 charts (Tiến độ KH, Top 10, Tỉ trọng)
-    col1, col2, col3 = st.columns([2, 3, 2])
+    # --- HÀNG 1: DOANH THU (Đã có sẵn, điều chỉnh lại) ---
+    col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.markdown("#### 📊 Tiến độ KH theo khu vực")
-        if not unit_performance.empty:
-            fig = go.Figure()
-            colors = ['#00CC96' if x >= 100 else '#FFA500' if x >= 80 else '#EF553B' 
-                      for x in unit_performance['revenue_completion']]
-            customdata = [[row['actual_revenue'], row['planned_revenue'], row['revenue_completion']]
-                          for _, row in unit_performance.iterrows()]
-            fig.add_trace(go.Bar(
-                x=unit_performance['business_unit'],
-                y=unit_performance['revenue_completion'],
-                text=[f"{v:.1f}%" for v in unit_performance['revenue_completion']],
-                textposition='outside',
-                marker_color=colors,
-                customdata=customdata,
-                hovertemplate='<b>%{x}</b><br>DT thực hiện: %{customdata[0]:,.0f} ₫<br>DT kế hoạch: %{customdata[1]:,.0f} ₫<br>Tiến độ: %{customdata[2]:.1f}%<extra></extra>'
-            ))
-            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="KH 100%")
-            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=30, r=30, t=10, b=30))
-            st.plotly_chart(fig)
-    
-    with col2:
-        st.markdown("#### 🎯 Top 10 Tuyến Tour")
+        st.markdown("##### 🎯 Top 10 Tuyến Tour (Doanh thu)")
         if not top_revenue.empty:
             fig = go.Figure()
             hovertext = []
@@ -468,7 +543,7 @@ with tab1:
                 unit_breakdown = get_route_unit_breakdown(filtered_tours, route)
                 if not unit_breakdown.empty:
                     breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['revenue'])} ({row['percentage']:.1f}%)"
-                                                  for _, row in unit_breakdown.iterrows()])
+                                                    for _, row in unit_breakdown.iterrows()])
                     hovertext.append(breakdown_text)
                 else:
                     hovertext.append("")
@@ -484,18 +559,19 @@ with tab1:
             ))
             fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
             st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu Top 10 Tuyến Tour.")
     
-    with col3:
-        st.markdown("#### 📊 Tỉ trọng các tuyến (%)")
+    with col2:
+        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Doanh thu)")
         if not top_revenue.empty:
             labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_revenue['route']]
-            # Add unit breakdown to hover
             hovertext = []
             for route in top_revenue['route']:
                 unit_breakdown = get_route_unit_breakdown(filtered_tours, route)
                 if not unit_breakdown.empty:
                     breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['revenue'])} ({row['percentage']:.1f}%)"
-                                                  for _, row in unit_breakdown.iterrows()])
+                                                    for _, row in unit_breakdown.iterrows()])
                     hovertext.append(breakdown_text)
                 else:
                     hovertext.append("")
@@ -510,7 +586,132 @@ with tab1:
             ))
             fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu tỉ trọng tuyến.")
+
+    st.markdown("---")
     
+    # --- HÀNG 2: LƯỢT KHÁCH (ĐÃ THÊM) ---
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        st.markdown("##### 🎯 Top 10 Tuyến Tour (Lượt khách)")
+        if not top_customers.empty:
+            fig = go.Figure()
+            # Lấy breakdown theo Đơn vị cho hover (giá trị là Lượt khách)
+            hovertext = []
+            for route in top_customers['route'][::-1]:
+                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='customers') # <--- Metric = customers
+                if not unit_breakdown.empty:
+                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_number(row['num_customers'])} ({row['percentage']:.1f}%)"
+                                                    for _, row in unit_breakdown.iterrows()])
+                    hovertext.append(breakdown_text)
+                else:
+                    hovertext.append("")
+            fig.add_trace(go.Bar(
+                y=top_customers['route'][::-1],
+                x=top_customers['num_customers'][::-1],
+                orientation='h',
+                text=[format_number(v) for v in top_customers['num_customers'][::-1]],
+                textposition='outside',
+                marker_color='#FF97FF', # Màu khác cho Lượt khách
+                customdata=hovertext,
+                hovertemplate='<b>%{y}</b><br>Tổng LK: %{x:,.0f}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
+            ))
+            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
+            st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu Top 10 Tuyến Tour.")
+            
+    with col2:
+        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Lượt khách)")
+        if not top_customers.empty:
+            labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_customers['route']]
+            
+            hovertext = []
+            for route in top_customers['route']:
+                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='customers') # <--- Metric = customers
+                if not unit_breakdown.empty:
+                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_number(row['num_customers'])} ({row['percentage']:.1f}%)"
+                                                    for _, row in unit_breakdown.iterrows()])
+                    hovertext.append(breakdown_text)
+                else:
+                    hovertext.append("")
+            
+            fig = go.Figure(go.Pie(
+                labels=labels,
+                values=top_customers['num_customers'],
+                textposition='outside',
+                textinfo='label+percent',
+                customdata=hovertext,
+                hovertemplate='<b>%{label}</b><br>Lượt khách: %{value:,.0f}<br>Tỉ lệ: %{percent}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
+            ))
+            fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu tỉ trọng tuyến.")
+
+    st.markdown("---")
+
+    # --- HÀNG 3: LỢI NHUẬN (ĐÃ THÊM) ---
+    col1, col2 = st.columns([3, 2])
+
+    with col1:
+        st.markdown("##### 🎯 Top 10 Tuyến Tour (Lợi nhuận)")
+        if not top_profit.empty:
+            fig = go.Figure()
+            hovertext = []
+            for route in top_profit['route'][::-1]:
+                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='profit') # <--- Metric = profit
+                if not unit_breakdown.empty:
+                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['gross_profit'])} ({row['percentage']:.1f}%)"
+                                                    for _, row in unit_breakdown.iterrows()])
+                    hovertext.append(breakdown_text)
+                else:
+                    hovertext.append("")
+            fig.add_trace(go.Bar(
+                y=top_profit['route'][::-1],
+                x=top_profit['gross_profit'][::-1],
+                orientation='h',
+                text=[format_currency(v) for v in top_profit['gross_profit'][::-1]],
+                textposition='outside',
+                marker_color='#FFA15A', # Màu khác cho Lợi nhuận
+                customdata=hovertext,
+                hovertemplate='<b>%{y}</b><br>Tổng LN: %{x:,.0f} ₫<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
+            ))
+            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
+            st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu Top 10 Tuyến Tour.")
+
+    with col2:
+        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Lợi nhuận)")
+        if not top_profit.empty:
+            labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_profit['route']]
+            
+            hovertext = []
+            for route in top_profit['route']:
+                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='profit') # <--- Metric = profit
+                if not unit_breakdown.empty:
+                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['gross_profit'])} ({row['percentage']:.1f}%)"
+                                                    for _, row in unit_breakdown.iterrows()])
+                    hovertext.append(breakdown_text)
+                else:
+                    hovertext.append("")
+            
+            fig = go.Figure(go.Pie(
+                labels=labels,
+                values=top_profit['gross_profit'],
+                textposition='outside',
+                textinfo='label+percent',
+                customdata=hovertext,
+                hovertemplate='<b>%{label}</b><br>Lợi nhuận: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
+            ))
+            fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig)
+        else:
+            st.info("Không có dữ liệu tỉ trọng tuyến.")
+
     st.markdown("---")
     
     # ========== VÙNG 5: CHỈ SỐ QUẢN LÝ HOẠT ĐỘNG ==========

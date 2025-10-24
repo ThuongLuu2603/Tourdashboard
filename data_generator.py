@@ -91,7 +91,7 @@ class VietravelDataGenerator:
             route: random.uniform(4, 7) for route in self.tour_routes
         }
     
-    def generate_tour_data(self, start_date, end_date, num_tours=500):
+    def generate_tour_data(self, start_date, end_date, num_tours=1500):
         """
         Generate tour booking data
         """
@@ -129,9 +129,9 @@ class VietravelDataGenerator:
             
             # Number of customers (group size)
             if random.random() < 0.3:  # 30% individual/couple
-                num_customers_in_booking = random.randint(1, 2)
+                num_customers_in_booking = random.randint(2, 4)
             else:  # 70% groups
-                num_customers_in_booking = random.randint(3, 15)
+                num_customers_in_booking = random.randint(5, 20)
             
             # Tour capacity
             tour_capacity = random.choice([20, 25, 30, 35, 40, 45])
@@ -232,6 +232,70 @@ class VietravelDataGenerator:
                             seasonality = random.uniform(0.7, 0.9)
                         
                         # Base plan values (distributed by segment)
+                        # ĐÃ CHỈNH SỬA: Giảm Base Customers từ [15, 70] xuống [5, 20]
+                        base_customers = random.randint(5, 20)  # Lower per segment
+                        planned_customers = int(base_customers * seasonality)
+                        
+                        # Revenue plan
+                        if route in ["Châu Âu", "Châu Mỹ"]:
+                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                            avg_price = random.randint(30000000, 50000000)
+                        elif route in ["Châu Úc", "Châu Phi"]:
+                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                            avg_price = random.randint(25000000, 40000000)
+                        elif route in ["Nhật Bản", "Hàn Quốc"]:
+                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                            avg_price = random.randint(15000000, 25000000)
+                        elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                            avg_price = random.randint(8000000, 12000000)
+                        else:  # Domestic routes
+                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                            avg_price = random.randint(3000000, 7000000)
+                        
+                        planned_revenue = planned_customers * avg_price
+                        
+                        # Gross profit plan (20% margin)
+                        planned_gross_profit = planned_revenue * 0.20
+                        
+                        plans.append({
+                            'year': year,
+                            'month': month,
+                            'business_unit': business_unit,
+                            'route': route,
+                            'segment': segment,
+                            'planned_customers': planned_customers,
+                            'planned_revenue': planned_revenue,
+                            'planned_gross_profit': planned_gross_profit
+                        })
+        
+        return pd.DataFrame(plans)
+        """
+        Generate monthly or yearly plan data
+        """
+        plans = []
+        
+        if month:
+            periods = [(year, month)]
+        else:
+            periods = [(year, m) for m in range(1, 13)]
+        
+        for year, month in periods:
+            for business_unit in self.business_units:
+                # Get routes for this business unit
+                unit_routes = [r for r, u in self.route_to_unit.items() if u == business_unit]
+                
+                for route in unit_routes:
+                    for segment in self.segments:
+                        # Seasonality factor
+                        if month in [1, 2, 4, 7, 8, 12]:  # Peak months
+                            seasonality = random.uniform(1.2, 1.5)
+                        elif month in [3, 9, 10]:  # Medium months
+                            seasonality = random.uniform(0.9, 1.1)
+                        else:  # Low months
+                            seasonality = random.uniform(0.7, 0.9)
+                        
+                        # Base plan values (distributed by segment)
                         base_customers = random.randint(15, 70)  # Lower per segment
                         planned_customers = int(base_customers * seasonality)
                         
@@ -296,7 +360,7 @@ def load_or_generate_data():
     # Generate current year data
     year_start = datetime(current_year, 1, 1)
     year_end = current_date
-    tours_df = generator.generate_tour_data(year_start, year_end, num_tours=500)
+    tours_df = generator.generate_tour_data(year_start, year_end, num_tours=1500)
     
     # Generate plan data for current year
     plans_df = generator.generate_plan_data(current_year)

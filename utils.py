@@ -287,7 +287,7 @@ def get_top_routes(tours_df, n=10, metric='revenue'):
     return grouped
 
 
-def get_route_unit_breakdown(tours_df, route_name):
+def get_route_unit_breakdown(tours_df, route_name, metric='revenue'):
     """
     Get breakdown by business unit for a specific route
     """
@@ -295,21 +295,31 @@ def get_route_unit_breakdown(tours_df, route_name):
     route_data = confirmed[confirmed['route'] == route_name]
     
     if route_data.empty:
-        return pd.DataFrame(columns=['business_unit', 'revenue', 'percentage'])
+        return pd.DataFrame(columns=['business_unit', 'revenue', 'num_customers', 'gross_profit', 'percentage'])
     
     unit_breakdown = route_data.groupby('business_unit').agg({
-        'revenue': 'sum'
+        'revenue': 'sum',
+        'num_customers': 'sum',
+        'gross_profit': 'sum'
     }).reset_index()
     
-    total_revenue = unit_breakdown['revenue'].sum()
+    if metric == 'revenue':
+        total_value = unit_breakdown['revenue'].sum()
+        col_name = 'revenue'
+    elif metric == 'customers':
+        total_value = unit_breakdown['num_customers'].sum()
+        col_name = 'num_customers'
+    else: # profit
+        total_value = unit_breakdown['gross_profit'].sum()
+        col_name = 'gross_profit'
     
     # ĐÃ SỬA: Bảo vệ chia cho 0
     unit_breakdown['percentage'] = np.where(
-        total_revenue > 0,
-        (unit_breakdown['revenue'] / total_revenue * 100).round(1),
+        total_value > 0,
+        (unit_breakdown['revenue'] / total_value * 100).round(1),
         0
     )
-    unit_breakdown = unit_breakdown.sort_values('revenue', ascending=False)
+    unit_breakdown = unit_breakdown.sort_values(col_name, ascending=False)
     
     return unit_breakdown
 
@@ -535,68 +545,181 @@ def get_segment_unit_breakdown(tours_df, start_date, end_date, segment_name, met
     return unit_breakdown
 
 
-def create_forecast_chart(tours_df, plans_df, start_date, end_date):
+def create_forecast_chart(tours_df, plans_df, start_date, end_date, date_option):
     """
-    Create forecast chart combining actual (bars) and plan (line) with projection
+    Create forecast chart combining cumulative actuals (bars) and planned/forecast lines (lines) for revenue.
+    Requires date_option (Tuần/Tháng/Quý/Năm) to determine the period_end_dt.
     """
-    current_data = filter_data_by_date(tours_df, start_date, end_date)
-    confirmed_data = filter_confirmed_bookings(current_data)
     
-    # Group by month for the period
-    confirmed_data['month'] = pd.to_datetime(confirmed_data['booking_date']).dt.to_period('M')
-    monthly_actual = confirmed_data.groupby('month').agg({
-        'revenue': 'sum'
-    }).reset_index()
-    monthly_actual['month_str'] = monthly_actual['month'].astype(str)
+    # --- 1. Chuẩn bị Dữ liệu và Chuẩn hóa Ngày tháng ---
+    confirmed_data = filter_confirmed_bookings(tours_df)
     
-    # Get monthly plans
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
+    start_dt = pd.to_datetime(start_date).normalize()
+    end_dt = pd.to_datetime(end_date).normalize()
+    today = pd.to_datetime(datetime.now().date())
+    
+    # LÔ-GÍC XÁC ĐỊNH NGÀY CUỐI CÙNG VÀ ĐỘ PHÂN GIẢI
+    period_end_dt = today
+    
+    # Xác định độ phân giải (Granularity)
+    if date_option == 'Năm' or date_option == 'Quý':
+        freq_unit = 'M'
+        x_format = "%m/%Y"
+        x_title = "Tháng"
+        
+        # Mở rộng kỳ Dự báo
+        if date_option == 'Năm':
+            period_end_dt = pd.to_datetime(datetime(start_dt.year, 12, 31))
+        elif date_option == 'Quý':
+            # Dự báo đến ngày cuối cùng của quý (Quý IV bắt đầu 01/10)
+            if start_dt.month in [1, 4, 7, 10]:
+                end_month = start_dt.month + 2
+                period_end_dt = pd.to_datetime(datetime(start_dt.year, end_month, 1)) + pd.offsets.MonthEnd(0)
+            else:
+                period_end_dt = today
+        
+    elif date_option == 'Tháng':
+        freq_unit = 'W' 
+        x_format = "T%W"
+        x_title = "Tuần"
+        
+        # Dự báo đến ngày cuối cùng của tháng
+        period_end_dt = start_dt + pd.offsets.MonthEnd(0)
+        
+    elif date_option == 'Tuần' or date_option == 'Tùy chỉnh':
+        freq_unit = 'D'
+        x_format = "%d/%m"
+        x_title = "Ngày"
+        period_end_dt = end_dt
+        
+    else: 
+        freq_unit = 'D'
+        x_format = "%d/%m"
+        x_title = "Ngày"
+        period_end_dt = end_dt
+
+
+    # Lọc dữ liệu Thực hiện đến ngày hôm nay
+    period_tours = filter_data_by_date(confirmed_data, start_dt, today, date_column='booking_date')
+
+    if period_tours.empty:
+        return go.Figure().update_layout(title=f'Không có dữ liệu Thực hiện từ {start_dt.strftime("%d/%m")}', height=300)
+        
+    # --- 2. Xử lý Dữ liệu Lũy kế Thực hiện ---
+    
+    # Tổng hợp Actuals theo đơn vị thời gian (freq_unit)
+    period_tours['period'] = pd.to_datetime(period_tours['booking_date']).dt.to_period(freq_unit)
+    daily_actual = period_tours.groupby('period')[['revenue']].sum().reset_index()
+    
+    # Chuyển Period sang Timestamp để vẽ cột
+    if freq_unit == 'M':
+        # Dùng ngày đầu tháng để vẽ cột
+        daily_actual['date'] = daily_actual['period'].apply(lambda x: x.start_time.normalize())
+        # Chiều rộng 20 ngày cho cột tháng
+        bar_width = 20 * 24 * 60 * 60 * 1000 
+    elif freq_unit == 'W':
+        daily_actual['date'] = daily_actual['period'].apply(lambda x: x.start_time.normalize())
+        # Chiều rộng 5 ngày cho cột tuần
+        bar_width = 5 * 24 * 60 * 60 * 1000
+    else: # D (Ngày)
+        daily_actual['date'] = daily_actual['period'].apply(lambda x: x.end_time.normalize())
+        bar_width = None # Plotly tự quyết định cho ngày
+        
+    # Sắp xếp và tính lũy kế
+    daily_actual = daily_actual.sort_values('date')
+    daily_actual['cumulative_actual'] = daily_actual['revenue'].cumsum()
+    
+    actual_data_points = daily_actual.copy()
+    
+    # Giá trị tổng thực hiện chính xác đến hôm nay (dùng cho Run-rate)
+    current_actual_revenue = period_tours['revenue'].sum() 
+
+
+    # --- 3. Xử lý Dữ liệu Kế hoạch và Dự báo ---
     
     plan_mask = (plans_df['year'] == start_dt.year) & \
                 (plans_df['month'] >= start_dt.month) & \
-                (plans_df['month'] <= end_dt.month)
-    period_plans = plans_df[plan_mask]
+                (plans_df['month'] <= period_end_dt.month) 
+                
+    total_planned_revenue = plans_df[plan_mask]['planned_revenue'].sum()
+
+    # Tính Kế hoạch lũy kế tuyến tính (Planned Line)
+    plan_date_range = pd.date_range(start=start_dt, end=period_end_dt, freq='D') 
+    total_days_in_period = (period_end_dt - start_dt).days + 1
+    daily_plan_rate = total_planned_revenue / total_days_in_period if total_days_in_period > 0 else 0
     
-    monthly_plan = period_plans.groupby('month').agg({
-        'planned_revenue': 'sum'
-    }).reset_index()
-    monthly_plan['month_str'] = monthly_plan['month'].apply(lambda x: f"{start_dt.year}-{x:02d}")
+    daily_plan_line = pd.DataFrame({'date': plan_date_range})
+    daily_plan_line['cumulative_planned'] = (daily_plan_line['date'] - start_dt).dt.days * daily_plan_rate + daily_plan_rate
     
-    # Create combined chart
+    # Tính Dự báo Run-rate 
+    days_elapsed = (today - start_dt).days + 1
+    daily_run_rate = current_actual_revenue / days_elapsed if days_elapsed > 0 else 0
+    
+    # Tạo chuỗi Dự báo (Forecast Line)
+    forecast_dates = pd.date_range(start=today, end=period_end_dt, freq='D')
+    forecast_line = pd.DataFrame({'date': forecast_dates})
+
+    forecast_line['cumulative_forecast'] = current_actual_revenue + (
+        (forecast_line['date'] - today).dt.days * daily_run_rate
+    )
+    
+    # --- 4. Tạo Biểu đồ Kết hợp ---
+    
     fig = go.Figure()
-    
-    # Actual bars
+
+    # Trace 1: Thực hiện Lũy kế (Dạng cột - ĐÃ SỬA LỖI WIDTH)
     fig.add_trace(go.Bar(
-        x=monthly_actual['month_str'],
-        y=monthly_actual['revenue'],
-        name='Thực hiện',
+        x=actual_data_points['date'],
+        y=actual_data_points['cumulative_actual'],
+        name='Thực hiện Lũy kế',
         marker_color='#636EFA',
-        hovertemplate='Thực hiện: %{y:,.0f} ₫<extra></extra>'
+        width=bar_width,
+        hovertemplate=f'{x_title}: %{{x|{x_format}}}<br>Thực hiện: %{{y:,.0f}} ₫<extra></extra>'
     ))
     
-    # Plan line
+    # Trace 2: Kế hoạch Lũy kế (Đường)
     fig.add_trace(go.Scatter(
-        x=monthly_plan['month_str'],
-        y=monthly_plan['planned_revenue'],
-        name='Kế hoạch',
-        mode='lines+markers',
-        line=dict(color='#EF553B', width=2, dash='dash'),
-        hovertemplate='Kế hoạch: %{y:,.0f} ₫<extra></extra>'
+        x=daily_plan_line['date'],
+        y=daily_plan_line['cumulative_planned'],
+        name='Kế hoạch Lũy kế',
+        mode='lines',
+        line=dict(color='#EF553B', width=2),
+        hovertemplate='Ngày: %{x|%d/%m}<br>Kế hoạch: %{y:,.0f} ₫<extra></extra>'
     ))
+
+    # Trace 3: Đường Dự báo Cuối kỳ (Đường nét đứt)
+    anchor_point = pd.DataFrame({
+        'date': [today],
+        'cumulative_forecast': [current_actual_revenue]
+    })
+    
+    forecast_dates_extended = pd.concat([anchor_point, 
+                                         forecast_line[['date', 'cumulative_forecast']]], ignore_index=True)
+                                         
+    fig.add_trace(go.Scatter(
+        x=forecast_dates_extended['date'],
+        y=forecast_dates_extended['cumulative_forecast'],
+        name='Dự báo Cuối kỳ',
+        mode='lines',
+        line=dict(color='#00CC96', width=2, dash='dot'),
+        hovertemplate='Ngày: %{x|%d/%m}<br>Dự báo: %{y:,.0f} ₫<extra></extra>'
+    ))
+    
+    # --- 5. Cập nhật Layout và Định dạng ---
     
     fig.update_layout(
-        xaxis_title="",
-        yaxis_title="",
-        height=200,
+        xaxis_title=x_title,
+        yaxis_title="Doanh thu Lũy kế (₫)",
+        height=300,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=30, r=30, t=40, b=30),
+        margin=dict(l=50, r=30, t=40, b=30),
         hovermode='x unified'
     )
     
+    fig.update_xaxes(tickformat=x_format, title=x_title, tickangle=0)
+    
     return fig
-
 
 def create_trend_chart(tours_df, start_date, end_date, metrics=['revenue', 'customers', 'profit']):
     """
@@ -962,3 +1085,32 @@ def get_unit_detailed_table(tours_df, plans_df, start_date, end_date):
     unit_table = unit_actual.merge(unit_plan, on='business_unit', how='left').fillna(0)
     
     return unit_table
+
+def get_unit_breakdown_simple(tours_df, metric='revenue'):
+    """
+    Get breakdown by business unit for a specific metric (revenue/customers/profit) for pie chart.
+    """
+    confirmed = filter_confirmed_bookings(tours_df)
+    
+    if confirmed.empty:
+        return pd.DataFrame(columns=['business_unit', 'value', 'percentage'])
+    
+    if metric == 'revenue':
+        unit_data = confirmed.groupby('business_unit')['revenue'].sum().reset_index()
+    elif metric == 'customers':
+        unit_data = confirmed.groupby('business_unit')['num_customers'].sum().reset_index()
+    else:  # profit
+        unit_data = confirmed.groupby('business_unit')['gross_profit'].sum().reset_index()
+        
+    unit_data.columns = ['business_unit', 'value']
+    
+    total_value = unit_data['value'].sum()
+    # Bảo vệ chia cho 0
+    unit_data['percentage'] = np.where(
+        total_value > 0,
+        (unit_data['value'] / total_value * 100).round(1),
+        0
+    )
+    unit_data = unit_data.sort_values('value', ascending=False)
+    
+    return unit_data    
