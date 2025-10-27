@@ -354,6 +354,28 @@ with tab1:
         st.markdown("<div style='font-size: 14px; font-weight: bold; margin-bottom: 10px;'>📊 Xu hướng Doanh thu / Lượt khách / Lợi nhuận theo thời gian</div>", unsafe_allow_html=True)
         fig_trend = create_trend_chart(filtered_tours, start_date, end_date, metrics=['revenue', 'customers', 'profit'])
         st.plotly_chart(fig_trend, use_container_width=True)
+    # Tính toán AOV
+    aov = kpis['actual_revenue'] / kpis['actual_customers'] if kpis['actual_customers'] > 0 else 0
+    ly_aov = kpis['ly_revenue'] / kpis['ly_customers'] if kpis['ly_customers'] > 0 else 0
+    aov_growth = get_growth_rate(aov, ly_aov)
+
+    with col1:
+        st.metric(
+            label="💵 DOANH THU TB/KHÁCH (AOV)",
+            value=format_currency(aov),
+            delta=f"{format_percentage(aov_growth)} so với cùng kỳ"
+        )
+        with st.expander("Chi tiết"):
+            st.write(f"**AOV Cùng kỳ:** {format_currency(ly_aov)}")
+            st.write(f"**Tăng trưởng AOV:** {format_percentage(aov_growth)}")
+            st.write(f"**Doanh thu Tổng:** {format_currency(kpis['actual_revenue'])}")
+            st.write(f"**Lượt khách Tổng:** {format_number(kpis['actual_customers'])}")
+
+    # Col 2 (trống) để căn chỉnh
+    with col2:
+        st.empty() 
+    st.markdown("")
+    col1, col2 = st.columns([1, 2])
     
     st.markdown("---")
     
@@ -737,7 +759,8 @@ with tab1:
             ops_metrics['cancel_rate'],
             "Tỷ lệ Khách Hủy/Hoãn",
             max_value=30,
-            threshold=10
+            threshold=10,
+            is_inverse_metric=True
         )
         st.plotly_chart(fig_cancel)
     
