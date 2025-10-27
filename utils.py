@@ -133,26 +133,41 @@ def calculate_kpis(tours_df, plans_df, start_date, end_date):
     }
 
 
-def create_gauge_chart(value, title, max_value=150, threshold=100, unit_breakdown=None):
+def create_gauge_chart(value, title, max_value=150, threshold=100, unit_breakdown=None, is_inverse_metric=False):
     """Create a gauge chart for completion rate with hover info for business units"""
     
-    # Determine color based on value
-    if value >= threshold:
-        color = "#00CC96"  # Green
-    elif value >= threshold * 0.8:
-        color = "#FFA500"  # Orange
+    value = value if not pd.isna(value) else 0
+
+    # LÔ-GÍC MÀU ĐÃ ĐẢO NGƯỢC
+    if is_inverse_metric:
+        if value <= threshold:
+            color = "#00CC96"  # Xanh lá: Tỷ lệ Tốt (Dưới ngưỡng)
+            bgcolor = "rgba(0, 204, 150, 0.2)"
+        elif value <= threshold * 1.5:
+            color = "#FFA500"  # Cam: Cần chú ý
+            bgcolor = "rgba(255, 165, 0, 0.2)"
+        else:
+            color = "#EF553B"  # Đỏ: Xấu (Vượt xa ngưỡng)
+            bgcolor = "rgba(239, 85, 59, 0.2)"
     else:
-        color = "#EF553B"  # Red
-    
+        # Logic màu ban đầu (Doanh thu, Lượt khách)
+        if value >= threshold:
+            color = "#00CC96"
+            bgcolor = "rgba(0, 204, 150, 0.2)"
+        elif value >= threshold * 0.8:
+            color = "#FFA500"
+            bgcolor = "rgba(255, 165, 0, 0.2)"
+        else:
+            color = "#EF553B"
+            bgcolor = "rgba(239, 85, 59, 0.2)"
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = value,
-        domain = {'x': [0, 1], 'y': [0, 1]},
+        domain = {'x': [0, 1], 'y': [1, 1]},
         title = {'text': title, 'font': {'size': 11}},
         number = {
             'suffix': "%", 
             'font': {'size': 20}
-            # ĐÃ XÓA 'align' để tránh ValueError
         },
         gauge = {
             'axis': {'range': [None, max_value], 'ticksuffix': "%", 'tickfont': {'size': 9}},
@@ -187,8 +202,8 @@ def create_gauge_chart(value, title, max_value=150, threshold=100, unit_breakdow
         ))
     
     fig.update_layout(
-        height=160,
-        margin=dict(l=5, r=5, t=30, b=5),
+        height=200,
+        margin=dict(l=10, r=10, t=30, b=5),
         hovermode='closest'
     )
     
