@@ -10,6 +10,9 @@ import pytz # Cần thiết cho Timezone handling
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
+# Cần import make_subplots ở đây để dùng trong app.py nếu cần cho chart phức tạp
+from plotly.subplots import make_subplots 
+from admin_ui import render_admin_ui
 
 # Import custom modules
 from data_generator import load_or_generate_data
@@ -34,7 +37,13 @@ from utils import (
     # Các hàm Marketing/CLV/Forecast
     create_forecast_chart, create_trend_chart, 
     calculate_marketing_metrics, calculate_cac_by_channel, calculate_clv_by_segment, 
-    create_profit_margin_chart_with_color
+    create_profit_margin_chart_with_color,
+    calculate_partner_performance,
+    
+    # Các hàm Đối tác mới (ĐÃ THÊM)
+    calculate_partner_kpis, calculate_partner_revenue_metrics, create_partner_trend_chart,
+    calculate_partner_breakdown_by_type,calculate_service_inventory, calculate_service_cancellation_metrics,
+    calculate_partner_revenue_by_type
 )
 
 # Page configuration
@@ -70,7 +79,6 @@ st.markdown("""
 # Initialize session state for data
 if 'data_loaded' not in st.session_state:
     with st.spinner('Đang tải dữ liệu...'):
-        # KHÔI PHỤC LẠI LỆNH GỌI DATA GENERATOR
         tours_df, plans_df, historical_df = load_or_generate_data()
         st.session_state.tours_df = tours_df
         st.session_state.plans_df = plans_df
@@ -161,6 +169,15 @@ with st.sidebar:
     st.subheader("Thiết lập hiển thị")
     top_n = st.slider("Top N tuyến tour", min_value=5, max_value=15, value=10)
     
+    # Bổ sung Filter cho Tab 3
+    st.markdown("---")
+    st.subheader("Bộ lọc Đối tác")
+    partners = ["Tất cả"] + sorted(tours_df['partner'].unique().tolist())
+    selected_partner = st.selectbox("Chọn Đối tác", partners)
+    
+    service_types = ["Tất cả"] + sorted(tours_df['service_type'].unique().tolist())
+    selected_service = st.selectbox("Chọn Loại dịch vụ", service_types)
+
     st.markdown("---")
     
     # Refresh data button
@@ -185,18 +202,56 @@ if selected_segment != "Tất cả":
     tours_filtered_dimensional = tours_filtered_dimensional[tours_filtered_dimensional['segment'] == selected_segment]
     filtered_plans = filtered_plans[filtered_plans['segment'] == selected_segment]
 
+# Áp dụng bộ lọc đối tác cho Tab 3
+partner_filtered_df = tours_filtered_dimensional.copy()
+if selected_partner != "Tất cả":
+    partner_filtered_df = partner_filtered_df[partner_filtered_df['partner'] == selected_partner]
+if selected_service != "Tất cả":
+    partner_filtered_df = partner_filtered_df[partner_filtered_df['service_type'] == selected_service]
+
 # Calculate KPIs using dimensionally filtered data (calculate_kpis will handle date filtering)
 kpis = calculate_kpis(tours_filtered_dimensional, filtered_plans, start_date, end_date)
 
 # Also create a date+dimension filtered version for charts that don't need historical data
 filtered_tours = filter_data_by_date(tours_filtered_dimensional, start_date, end_date)
 
+
+
+if 'show_admin_ui' not in st.session_state:
+    st.session_state.show_admin_ui = False
+
+# Nút mở/đóng UI Admin (đặt ở khu vực trên cùng)
+col_toggle, col_empty = st.columns([1, 4])
+
+with col_toggle:
+    if st.session_state.show_admin_ui:
+        if st.button("<< Quay lại Dashboard Chính", type="secondary"):
+            st.session_state.show_admin_ui = False
+            st.rerun()
+    else:
+        if st.button("🔧 Mở UI Nhập liệu/Sửa Hợp đồng (Admin)", type="secondary"):
+            st.session_state.show_admin_ui = True
+            st.rerun()
+
+# ----------------------------------------------------
+# KHU VỰC HIỂN THỊ UI ADMIN LỚN
+# ----------------------------------------------------
+if st.session_state.show_admin_ui:
+    render_admin_ui() # <--- GỌI HÀM TỪ FILE admin_ui.py
+
+
+
+
+
+
+
 # ============================================================
 # MAIN TABS
 # ============================================================
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "📊 Tổng quan",
-    "🔍 Chi tiết"
+    "🔍 Chi tiết",
+    "🤝 Đối tác" # <--- ĐÃ THÊM TAB 3
 ])
 
 # ============================================================
@@ -354,6 +409,11 @@ with tab1:
         st.markdown("<div style='font-size: 14px; font-weight: bold; margin-bottom: 10px;'>📊 Xu hướng Doanh thu / Lượt khách / Lợi nhuận theo thời gian</div>", unsafe_allow_html=True)
         fig_trend = create_trend_chart(filtered_tours, start_date, end_date, metrics=['revenue', 'customers', 'profit'])
         st.plotly_chart(fig_trend, use_container_width=True)
+
+    # Row 3 (MỚI): Doanh thu trung bình/Khách (AOV)
+    st.markdown("")
+    col1, col2 = st.columns([1, 2]) # Vẫn dùng tỉ lệ 1:2 để căn chỉnh
+
     # Tính toán AOV
     aov = kpis['actual_revenue'] / kpis['actual_customers'] if kpis['actual_customers'] > 0 else 0
     ly_aov = kpis['ly_revenue'] / kpis['ly_customers'] if kpis['ly_customers'] > 0 else 0
@@ -374,13 +434,10 @@ with tab1:
     # Col 2 (trống) để căn chỉnh
     with col2:
         st.empty() 
-    st.markdown("")
-    col1, col2 = st.columns([1, 2])
-    
     st.markdown("---")
     
     
-# ========== VÙNG 3: PHÂN THEO PHÂN KHÚC & ĐƠN VỊ KINH DOANH ==========
+    # ========== VÙNG 3: PHÂN THEO PHÂN KHÚC & ĐƠN VỊ KINH DOANH ==========
     st.markdown("### Vùng 3: Phân theo Phân khúc & Đơn vị Kinh doanh")
     SEGMENT_COLORS = ['#3CB371', '#6495ED', '#FFA07A']
     BU_COLORS = ['#3CB371', '#6495ED', '#FFA07A', '#FF6347']
@@ -1001,6 +1058,249 @@ with tab2:
         display_df.columns = ['Đơn vị', 'Doanh thu', 'Lượt khách', 'Lợi nhuận gộp', 'Tỷ suất LN (%)', 'DT TB/khách']
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
+
+# ============================================================
+# TAB 3: ĐỐI TÁC (TÁI CẤU TRÚC HOÀN CHỈNH)
+# ============================================================
+with tab3:
+    st.title("🤝 Dashboard Quản lý Dịch vụ và Đối tác")
+    
+    # Lấy dữ liệu đã lọc theo Đối tác/Dịch vụ
+    # Giả định các hàm tính toán đã được định nghĩa trong utils.py hoặc được import
+    partner_filtered_data = filter_data_by_date(partner_filtered_df, start_date, end_date)
+    partner_kpis = calculate_partner_kpis(partner_filtered_data)
+    partner_revenue_metrics = calculate_partner_revenue_metrics(partner_filtered_data)
+    service_cancel_metrics = calculate_service_cancellation_metrics(partner_filtered_data)
+    service_inventory_total = calculate_service_inventory(partner_filtered_data)['total_units'].sum()
+    partner_performance = calculate_partner_performance(partner_filtered_data) 
+    
+    # Dữ liệu phân tích chi tiết theo loại (cho Expander Vùng 1)
+    active_breakdown = calculate_partner_breakdown_by_type(partner_filtered_data, status_filter="Đang triển khai")
+    expiring_breakdown = calculate_partner_breakdown_by_type(partner_filtered_data, status_filter="Sắp hết hạn")
+    
+    # --- VÙNG 1: TỔNG QUAN KPIs VÀ CẢNH BÁO (ĐÃ THÊM CHI TIẾT DỊCH VỤ) ---
+    st.markdown("### 🎯 Vùng 1: Tổng quan Đối tác & Cảnh báo Hợp đồng")
+    
+    # Hàng 1: 4 KPI Cards tập trung
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Tổng đối tác Đang triển khai
+    with col1:
+        st.metric(
+            label="🤝 Tổng đối tác Đang triển khai",
+            delta=" Tăng 2",
+            value=format_number(partner_kpis['total_active_partners'])
+        )
+        # THÊM CHI TIẾT: Phân theo Loại Dịch vụ
+        with st.expander("Chi tiết: Đang triển khai"):
+            for _, row in active_breakdown.iterrows():
+                st.write(f"**{row['type']}**: {format_number(row['count'])} đối tác")
+        
+    # Hợp đồng Sắp hết hạn (Cảnh báo)
+    with col2:
+        expiring_contracts = partner_kpis['contracts_status_count'][partner_kpis['contracts_status_count']['status'] == 'Sắp hết hạn']['count'].sum()
+        st.metric(
+            label="🚨 Hợp đồng Sắp hết hạn",
+            value=format_number(expiring_contracts),
+            delta="Cần gia hạn",
+            delta_color="inverse"
+        )
+        # THÊM CHI TIẾT: Phân theo Loại Dịch vụ
+        with st.expander("Chi tiết: Sắp hết hạn"):
+            for _, row in expiring_breakdown.iterrows():
+                st.write(f"**{row['type']}**: {format_number(row['count'])} hợp đồng")
+        
+    # Tổng Doanh thu dịch vụ (Revenue)
+    with col3:
+        st.metric(
+            label="💰 Tổng Dịch vụ đang giữ",
+            delta=" Tăng 2 tỷ",
+            value=format_currency(partner_kpis['total_service_revenue'])
+        )
+        # THÊM CHI TIẾT: Phân theo Loại Dịch vụ
+        # Giả định hàm calculate_partner_revenue_by_type trả về DataFrame: type, revenue
+        revenue_by_type = calculate_partner_revenue_by_type(partner_filtered_data) # <--- Cần hàm này trong utils.py
+        with st.expander("Chi tiết: Doanh thu theo Loại DV"):
+            for _, row in revenue_by_type.iterrows():
+                st.write(f"**{row['service_type']}**: {format_currency(row['revenue'])}")
+        
+    # Tình trạng Hủy dịch vụ (Gauge Chart)
+    with col4:
+        st.markdown("##### Tỷ lệ Hủy Dịch vụ")
+        fig_service_cancel = create_gauge_chart(
+            service_cancel_metrics['cancel_rate'],
+            "Tỷ lệ Hủy Dịch vụ",
+            max_value=30, 
+            threshold=10, 
+            is_inverse_metric=True
+        )
+        st.plotly_chart(fig_service_cancel, use_container_width=True)
+
+    st.markdown("---")
+    
+    
+    # --- VÙNG 2: PHÂN TÍCH TÌNH TRẠNG HỢP ĐỒNG & PHÂN TÍCH DỊCH VỤ (ĐÃ SỬA CHÚ THÍCH) ---
+    st.markdown("### 📊 Vùng 2: Trạng thái Hợp đồng & Phân tích Dịch vụ")
+    
+    # Dữ liệu cho biểu đồ tròn (Tỷ trọng Trả trước/Trả sau)
+    payment_status_data = partner_filtered_data.groupby('payment_status')['partner'].count().reset_index()
+    payment_status_data.columns = ['status', 'count']
+    
+    col_status, col_price = st.columns([1, 2])
+    
+    # 1. Biểu đồ: Tỷ trọng Trạng thái Thanh toán (Pie Chart)
+    with col_status:
+        st.markdown("##### Tỷ trọng Thanh toán Hợp đồng")
+        payment_data = payment_status_data[payment_status_data['status'].isin(['Trả trước', 'Trả sau'])].copy()
+        total_payment_contracts = payment_data['count'].sum() # TỔNG HỢP ĐỒNG
+        
+        if not payment_data.empty:
+            count_prepaid = payment_data[payment_data['status'] == 'Trả trước']['count'].iloc[0] if 'Trả trước' in payment_data['status'].values else 0
+            count_postpaid = payment_data[payment_data['status'] == 'Trả sau']['count'].iloc[0] if 'Trả sau' in payment_data['status'].values else 0
+            
+            # --- HIỂN THỊ CHÚ THÍCH MỚI ---
+            st.markdown(f"""
+            <div style="font-size: 14px; font-weight: bold; text-align: center; margin-bottom: 5px;">
+                Tổng Hợp đồng: {format_number(total_payment_contracts)}
+            </div>
+            <div style="font-size: 13px; text-align: center; margin-bottom: 5px;">
+                <span style="color: #636EFA;">■ Trả trước:</span> {format_number(count_prepaid)} hợp đồng
+                <span style="color: #FFA15A; margin-left: 15px;">■ Trả sau:</span> {format_number(count_postpaid)} hợp đồng
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # --- TẠO BIỂU ĐỒ TRÒN (TẮT CHÚ THÍCH TỰ ĐỘNG) ---
+            fig_payment_pie = px.pie(
+                payment_data, 
+                values='count', 
+                names='status',
+                color_discrete_sequence=['#636EFA', '#FFA15A'],
+            )
+            
+            fig_payment_pie.update_traces(textinfo='percent+label', 
+                                            hovertemplate='<b>%{label}</b><br>Số lượng: %{value:,.0f}<br>Tỉ lệ: %{percent}<extra></extra>')
+            
+            fig_payment_pie.update_layout(
+                height=300, # Đã chỉnh height thấp hơn
+                margin=dict(t=10, b=10, l=10, r=10),
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig_payment_pie, use_container_width=True)
+        else:
+            st.info("Không có dữ liệu hợp đồng Trả trước/Trả sau.")
+            
+        # Thống kê chi tiết
+        active_breakdown = calculate_partner_breakdown_by_type(partner_filtered_data, status_filter="Đang triển khai")
+        with st.expander("Phân loại Đối tác Đang triển khai"):
+             for _, row in active_breakdown.iterrows():
+                 st.write(f"**{row['type']}**: {format_number(row['count'])} đối tác")
+
+    # 2. Bar Chart: Giá Dịch vụ (Giá TB/Khách)
+    with col_price:
+        st.markdown("##### Phân tích Giá Dịch vụ (Max, Avg, Min)")
+        if not partner_revenue_metrics.empty:
+            df_melted = partner_revenue_metrics.melt(
+                id_vars='service_type',
+                value_vars=['max_price', 'avg_price', 'min_price'],
+                var_name='price_type',
+                value_name='price_value'
+            )
+            
+            df_melted['price_type'] = df_melted['price_type'].replace({
+                'max_price': 'Giá Cao nhất',
+                'avg_price': 'Giá Trung bình',
+                'min_price': 'Giá Thấp nhất'
+            })
+            
+            fig_price_comp = px.bar(
+                df_melted,
+                x='price_value',
+                y='service_type',
+                color='price_type',
+                orientation='h',
+                title='Giá Dịch vụ theo Loại (Max, Avg, Min)',
+                barmode='group'
+            )
+            fig_price_comp.update_xaxes(title="Giá (₫)")
+            fig_price_comp.update_traces(hovertemplate='%{x:,.0f} ₫<extra></extra>')
+            fig_price_comp.update_layout(height=350, yaxis={'categoryorder':'total ascending'}, margin=dict(t=30))
+            st.plotly_chart(fig_price_comp, use_container_width=True)
+        
+    st.markdown("---")
+
+
+    # --- VÙNG 3: XU HƯỚNG VÀ HIỆU QUẢ HỢP TÁC ---
+    st.markdown("### 📈 Vùng 3: Xu hướng và Hiệu quả Hợp tác")
+    
+    # Row 1: Biểu đồ Doanh thu và Số lượng khách theo thời gian
+    col_trend, col_scatter = st.columns(2)
+    
+    with col_trend:
+        st.markdown("##### Xu hướng Doanh thu và Lượt khách từ Đối tác")
+        fig_partner_trend = create_partner_trend_chart(partner_filtered_df, start_date, end_date)
+        st.plotly_chart(fig_partner_trend, use_container_width=True)
+    
+    with col_scatter:
+        st.markdown("##### Đánh giá Hiệu quả Từng Đối tác")
+        if not partner_performance.empty:
+            # Biểu đồ Bong bóng: X=Doanh thu, Y=Tỷ lệ Phản hồi, Size=Số lượng khách
+            fig_scatter = px.scatter(
+                partner_performance,
+                x='total_revenue',
+                y='avg_feedback',
+                size='total_customers',
+                color='partner',
+                hover_name='partner',
+                title='Hiệu quả Đối tác (DT vs Phản hồi Tích cực)',
+                labels={'total_revenue': 'Doanh thu (₫)', 'avg_feedback': 'Tỷ lệ phản hồi tích cực (%)', 'total_customers': 'Lượt khách'}
+            )
+            fig_scatter.update_traces(hovertemplate='<b>%{hovertext}</b><br>Doanh thu: %{x:,.0f} ₫<br>Phản hồi: %{y:.1%}<br>Lượt khách: %{marker.size:,.0f}<extra></extra>')
+            fig_scatter.update_layout(height=400, showlegend=False, margin=dict(t=30))
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
+    # Bảng chi tiết Doanh thu/Chi phí/Lợi nhuận
+    st.markdown("#### Bảng Chi tiết Hợp đồng và Tỷ suất Lợi nhuận")
+    
+    # Lấy bảng hợp đồng chi tiết
+    df_partner_revenue_detail = partner_filtered_data.groupby(['partner', 'service_type', 'payment_status', 'contract_status']).agg(
+        total_revenue=('revenue', 'sum'),
+        total_service_cost=('service_cost', 'sum'),
+        num_bookings=('booking_id', 'count')
+    ).reset_index()
+    
+    df_partner_revenue_detail['profit_margin'] = np.where(
+        df_partner_revenue_detail['total_revenue'] > 0,
+        ((df_partner_revenue_detail['total_revenue'] - df_partner_revenue_detail['total_service_cost']) / df_partner_revenue_detail['total_revenue']) * 100,
+        0
+    )
+    
+    # Áp dụng formatting
+    df_partner_revenue_detail['total_revenue'] = df_partner_revenue_detail['total_revenue'].apply(format_currency)
+    df_partner_revenue_detail['total_service_cost'] = df_partner_revenue_detail['total_service_cost'].apply(format_currency)
+    df_partner_revenue_detail['profit_margin'] = df_partner_revenue_detail['profit_margin'].apply(lambda x: f"{x:.1f}%")
+
+    df_partner_revenue_detail.rename(columns={
+        'contract_status': 'Trạng thái HĐ', 
+        'service_type': 'Loại DV', 
+        'payment_status': 'Tình trạng TT', 
+        'total_revenue': 'Doanh thu',
+        'total_service_cost': 'Chi phí DV',
+        'num_bookings': 'SL HĐ',
+        'profit_margin': 'Tỷ suất LN (%)'
+    }, inplace=True)
+    
+    # Hàm highlight_expiring (Giữ nguyên)
+    def highlight_expiring(s):
+        if s['Trạng thái HĐ'] == 'Sắp hết hạn':
+            return ['background-color: #ffe0e0; color: red'] * len(s)
+        return [''] * len(s)
+
+    st.dataframe(
+        df_partner_revenue_detail[['partner', 'Loại DV', 'Doanh thu', 'Chi phí DV', 'Tỷ suất LN (%)', 'Trạng thái HĐ', 'Tình trạng TT']]
+        .style.apply(highlight_expiring, axis=1), 
+        use_container_width=True, hide_index=True
+    )
 
 st.markdown("---")
 

@@ -90,6 +90,17 @@ class VietravelDataGenerator:
         self.safety_margins = {
             route: random.uniform(4, 7) for route in self.tour_routes
         }
+        
+        # Partner Data
+        self.partners = [
+                    ("Khách sạn A", "Khách sạn"), ("Khách sạn B", "Khách sạn"), ("Khách sạn C", "Khách sạn"),
+                    ("Hàng không X", "Vé máy bay"), ("Hàng không Y", "Vé máy bay"), 
+                    ("Vận chuyển 1", "Vận chuyển"), ("Vận chuyển 2", "Vận chuyển"),
+                    ("Nhà hàng A", "Ăn uống"), ("Nhà hàng B", "Ăn uống"),
+                    ("Điểm tham quan 1", "Điểm tham quan"), ("Đại lý Quốc tế 1", "Đối tác nước ngoài")
+                ]
+
+        self.service_types = ["Lưu trú", "Vé máy bay", "Vận chuyển", "Ăn uống", "Tham quan"]
     
     def generate_tour_data(self, start_date, end_date, num_tours=1500):
         """
@@ -103,7 +114,6 @@ class VietravelDataGenerator:
         
         for i in range(num_tours):
             # Random booking date
-            # ĐÃ SỬA: Loại bỏ thông tin múi giờ
             booking_date = fake.date_time_between(
                 start_date=start_date,
                 end_date=end_date
@@ -120,20 +130,17 @@ class VietravelDataGenerator:
             # Segment (phân khúc) based on route and group size
             if route in ["Châu Âu", "Châu Mỹ", "Châu Úc", "Châu Phi", "Nhật Bản", "Hàn Quốc", 
                         "Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
-                # International routes: more likely Inbound
-                segment_weights = [0.25, 0.35, 0.40]  # FIT, GIT, Inbound
+                segment_weights = [0.25, 0.35, 0.40]
             else:
-                # Domestic routes: less Inbound
-                segment_weights = [0.35, 0.55, 0.10]  # FIT, GIT, Inbound
+                segment_weights = [0.35, 0.55, 0.10]
             segment = random.choices(self.segments, weights=segment_weights)[0]
             
             # Number of customers (group size)
-            if random.random() < 0.3:  # 30% individual/couple
+            if random.random() < 0.3:
                 num_customers_in_booking = random.randint(2, 4)
-            else:  # 70% groups
+            else:
                 num_customers_in_booking = random.randint(5, 20)
             
-            # Tour capacity
             tour_capacity = random.choice([20, 25, 30, 35, 40, 45])
             
             # Price per person (depends on route)
@@ -145,24 +152,20 @@ class VietravelDataGenerator:
                 price_per_person = random.randint(15000000, 35000000)
             elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
                 price_per_person = random.randint(8000000, 18000000)
-            else:  # Domestic routes
+            else:
                 price_per_person = random.randint(3000000, 12000000)
             
-            # Revenue
             revenue = price_per_person * num_customers_in_booking
             
-            # Cost (to calculate gross profit)
             cost_ratio = random.uniform(0.85, 0.95)
             cost = revenue * cost_ratio
             gross_profit = revenue - cost
             gross_profit_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
             
-            # Status (booking status)
-            status_weights = [0.75, 0.15, 0.10]  # Confirmed, Cancelled, Postponed
+            status_weights = [0.75, 0.15, 0.10]
             status = random.choices(["Đã xác nhận", "Đã hủy", "Hoãn"], weights=status_weights)[0]
             
-            # Customer ID (some customers book multiple times)
-            if random.random() < 0.25:  # 25% chance of returning customer
+            if random.random() < 0.25:
                 customer_id = random.choice(customer_ids[:int(len(customer_ids) * 0.3)])
             else:
                 customer_id = random.choice(customer_ids)
@@ -177,30 +180,37 @@ class VietravelDataGenerator:
                 sales_cost = revenue * random.uniform(0.01, 0.02)
             elif channel == "Trực tiếp VPGD":
                 sales_cost = revenue * random.uniform(0.02, 0.04)
-            else:  # Đại lý
+            else:
                 sales_cost = revenue * random.uniform(0.05, 0.08)
             
             opex = marketing_cost + sales_cost
             
+            # Partner and Service Data (cho Tab 3)
+            partner_name, partner_type = random.choice(self.partners)
+            service_type = partner_type # Tạm thời dùng loại đối tác làm loại dịch vụ
+            contract_status = random.choices(["Đang triển khai", "Sắp hết hạn", "Đã thanh lý"], weights=[0.8, 0.1, 0.1])[0]
+            payment_status = random.choices(["Trả trước", "Trả sau", "Chưa thanh toán"], weights=[0.6, 0.3, 0.1])[0]
+            feedback_ratio = random.uniform(0.7, 0.95)
+            service_cost = cost * random.uniform(0.8, 1.2)
+
             tours.append({
                 'booking_id': f"BK{i+1:06d}",
-                'customer_id': customer_id,
-                'booking_date': booking_date,
-                'route': route,
-                'business_unit': business_unit,
-                'sales_channel': channel,
-                'segment': segment,
-                'num_customers': num_customers_in_booking,
-                'tour_capacity': tour_capacity,
-                'price_per_person': price_per_person,
-                'revenue': revenue,
-                'cost': cost,
-                'gross_profit': gross_profit,
-                'gross_profit_margin': gross_profit_margin,
-                'status': status,
-                'marketing_cost': marketing_cost,
-                'sales_cost': sales_cost,
-                'opex': opex
+                # ... (Giữ nguyên các trường booking_id đến opex) ...
+                'customer_id': customer_id, 'booking_date': booking_date, 'route': route, 
+                'business_unit': business_unit, 'sales_channel': channel, 'segment': segment, 
+                'num_customers': num_customers_in_booking, 'tour_capacity': tour_capacity, 
+                'price_per_person': price_per_person, 'revenue': revenue, 'cost': cost, 
+                'gross_profit': gross_profit, 'gross_profit_margin': gross_profit_margin, 
+                'status': status, 'marketing_cost': marketing_cost, 'sales_cost': sales_cost, 'opex': opex,
+                
+                # Thêm trường Đối tác MỚI
+                'partner': partner_name,
+                'partner_type': partner_type, # <--- TRƯỜNG MỚI ĐỂ PHÂN LOẠI
+                'service_type': service_type,
+                'contract_status': contract_status,
+                'payment_status': payment_status,
+                'feedback_ratio': feedback_ratio,
+                'service_cost': service_cost 
             })
         
         return pd.DataFrame(tours)
@@ -224,92 +234,28 @@ class VietravelDataGenerator:
                 for route in unit_routes:
                     for segment in self.segments:
                         # Seasonality factor
-                        if month in [1, 2, 4, 7, 8, 12]:  # Peak months
+                        if month in [1, 2, 4, 7, 8, 12]:
                             seasonality = random.uniform(1.2, 1.5)
-                        elif month in [3, 9, 10]:  # Medium months
+                        elif month in [3, 9, 10]:
                             seasonality = random.uniform(0.9, 1.1)
-                        else:  # Low months
+                        else:
                             seasonality = random.uniform(0.7, 0.9)
                         
                         # Base plan values (distributed by segment)
-                        # ĐÃ CHỈNH SỬA: Giảm Base Customers từ [15, 70] xuống [5, 20]
-                        base_customers = random.randint(5, 20)  # Lower per segment
+                        base_customers = random.randint(5, 20)
                         planned_customers = int(base_customers * seasonality)
                         
                         # Revenue plan
                         if route in ["Châu Âu", "Châu Mỹ"]:
-                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
                             avg_price = random.randint(30000000, 50000000)
                         elif route in ["Châu Úc", "Châu Phi"]:
-                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
                             avg_price = random.randint(25000000, 40000000)
                         elif route in ["Nhật Bản", "Hàn Quốc"]:
-                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
                             avg_price = random.randint(15000000, 25000000)
                         elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
-                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
                             avg_price = random.randint(8000000, 12000000)
-                        else:  # Domestic routes
-                            # ĐÃ CHỈNH SỬA: Giảm Avg Price
+                        else:
                             avg_price = random.randint(3000000, 7000000)
-                        
-                        planned_revenue = planned_customers * avg_price
-                        
-                        # Gross profit plan (20% margin)
-                        planned_gross_profit = planned_revenue * 0.20
-                        
-                        plans.append({
-                            'year': year,
-                            'month': month,
-                            'business_unit': business_unit,
-                            'route': route,
-                            'segment': segment,
-                            'planned_customers': planned_customers,
-                            'planned_revenue': planned_revenue,
-                            'planned_gross_profit': planned_gross_profit
-                        })
-        
-        return pd.DataFrame(plans)
-        """
-        Generate monthly or yearly plan data
-        """
-        plans = []
-        
-        if month:
-            periods = [(year, month)]
-        else:
-            periods = [(year, m) for m in range(1, 13)]
-        
-        for year, month in periods:
-            for business_unit in self.business_units:
-                # Get routes for this business unit
-                unit_routes = [r for r, u in self.route_to_unit.items() if u == business_unit]
-                
-                for route in unit_routes:
-                    for segment in self.segments:
-                        # Seasonality factor
-                        if month in [1, 2, 4, 7, 8, 12]:  # Peak months
-                            seasonality = random.uniform(1.2, 1.5)
-                        elif month in [3, 9, 10]:  # Medium months
-                            seasonality = random.uniform(0.9, 1.1)
-                        else:  # Low months
-                            seasonality = random.uniform(0.7, 0.9)
-                        
-                        # Base plan values (distributed by segment)
-                        base_customers = random.randint(15, 70)  # Lower per segment
-                        planned_customers = int(base_customers * seasonality)
-                        
-                        # Revenue plan
-                        if route in ["Châu Âu", "Châu Mỹ"]:
-                            avg_price = random.randint(50000000, 70000000)
-                        elif route in ["Châu Úc", "Châu Phi"]:
-                            avg_price = random.randint(40000000, 55000000)
-                        elif route in ["Nhật Bản", "Hàn Quốc"]:
-                            avg_price = random.randint(20000000, 30000000)
-                        elif route in ["Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
-                            avg_price = random.randint(10000000, 15000000)
-                        else:  # Domestic routes
-                            avg_price = random.randint(5000000, 10000000)
                         
                         planned_revenue = planned_customers * avg_price
                         

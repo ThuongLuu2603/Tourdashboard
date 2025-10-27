@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 
 
 def format_currency(value):
@@ -1133,3 +1134,210 @@ def get_unit_breakdown_simple(tours_df, metric='revenue'):
     unit_data = unit_data.sort_values('value', ascending=False)
     
     return unit_data
+
+# --- HÀM MỚI CHO TAB 3 ---
+
+def calculate_partner_breakdown_by_type(tours_df, status_filter):
+    """Calculates active/expiring partner count broken down by partner_type."""
+    # Logic này yêu cầu cột 'partner_type' phải có trong tours_df
+    df_filtered = tours_df[tours_df['contract_status'] == status_filter].copy()
+    
+    # Định nghĩa các loại đối tác cố định để đảm bảo Expander hiển thị đủ các loại
+    partner_types = ['Khách sạn', 'Ăn uống', 'Vận chuyển', 'Vé máy bay', 'Điểm tham quan', 'Đối tác nước ngoài']
+    
+    if df_filtered.empty:
+        # Trả về DataFrame với count = 0 cho tất cả các loại
+        return pd.DataFrame([{'type': t, 'count': 0} for t in partner_types])
+
+    breakdown = df_filtered.groupby('partner_type')['partner'].nunique().reset_index()
+    breakdown.columns = ['type', 'count']
+    
+    # Xử lý các loại đối tác không có trong dữ liệu
+    existing_types = breakdown['type'].tolist()
+    missing_types = [t for t in partner_types if t not in existing_types]
+    
+    if missing_types:
+        df_missing = pd.DataFrame([{'type': t, 'count': 0} for t in missing_types])
+        breakdown = pd.concat([breakdown, df_missing], ignore_index=True)
+    
+    return breakdown
+    
+def calculate_partner_performance(partner_df):
+    """
+    Calculates key performance metrics for partners used in the scatter plot.
+    """
+    # Lấy dữ liệu đã xác nhận (hoặc dữ liệu đã lọc theo kỳ)
+    # Vì partner_df đã được lọc theo date/dimensional, ta dùng nó trực tiếp
+    
+    if partner_df.empty:
+        return pd.DataFrame(columns=['partner', 'total_revenue', 'avg_feedback', 'total_customers'])
+
+    partner_performance = partner_df.groupby('partner').agg(
+        total_revenue=('revenue', 'sum'),
+        # Giả định cột feedback_ratio là tỷ lệ phản hồi tích cực (0-1)
+        avg_feedback=('feedback_ratio', 'mean'), 
+        total_customers=('num_customers', 'sum')
+    ).reset_index()
+    
+    # Chuyển đổi tỷ lệ phản hồi thành phần trăm
+    partner_performance['avg_feedback'] = partner_performance['avg_feedback'] * 100
+
+    return partner_performance
+
+def calculate_partner_revenue_by_type(partner_df):
+    """
+    Calculates total revenue grouped by service_type for expander detail.
+    """
+    if partner_df.empty:
+        return pd.DataFrame(columns=['service_type', 'revenue'])
+    
+    revenue_by_type = partner_df.groupby('service_type')['revenue'].sum().reset_index()
+    revenue_by_type = revenue_by_type.sort_values('revenue', ascending=False)
+    
+    return revenue_by_type    
+
+# HÀM MỚI CHO VÙNG 2 TAB 3: TÍNH TỔNG TỒN KHO DỊCH VỤ VÀ TỶ LỆ HỦY DỊCH VỤ
+def calculate_service_inventory(tours_df, service_type=None):
+    """Calculates total service units (customers) held by type."""
+    df = tours_df.copy()
+    
+    if service_type and service_type != "Tất cả":
+        df = df[df['service_type'] == service_type]
+    
+    # Tính tổng số lượng khách hàng sử dụng dịch vụ này (đơn vị tồn kho)
+    inventory = df.groupby('service_type')['num_customers'].sum().reset_index()
+    inventory.columns = ['service_type', 'total_units']
+    return inventory
+
+def calculate_service_cancellation_metrics(tours_df):
+    """Calculates service cancellation rate based on contract status."""
+    
+    # Giả định: Các tour có trạng thái 'Đã hủy' hoặc 'Hoãn' liên quan đến hủy dịch vụ
+    total_services = len(tours_df)
+    
+    if total_services == 0:
+        return {'cancel_rate': 0, 'total_cancelled': 0}
+
+    # Giả định: Hủy hợp đồng = Hủy/Hoãn Tour
+    cancelled_services = tours_df[tours_df['status'].isin(['Đã hủy', 'Hoãn'])]
+    total_cancelled = len(cancelled_services)
+    
+    cancellation_rate = (total_cancelled / total_services) * 100
+    
+    return {
+        'cancel_rate': cancellation_rate,
+        'total_cancelled': total_cancelled
+    }
+
+
+
+def calculate_partner_kpis(tours_df):
+    """Calculate core KPIs for Partner Management (Vùng 1)"""
+    
+    # Lọc dữ liệu hợp đồng đang triển khai (Đơn giản hóa: dùng trạng thái hợp đồng)
+    active_contracts = tours_df[tours_df['contract_status'].isin(["Đang triển khai", "Sắp hết hạn"])]
+    
+    total_active_partners = active_contracts['partner'].nunique()
+    total_contracts = active_contracts['partner'].count()
+    
+    # Tình trạng hợp đồng
+    contracts_status_count = active_contracts.groupby('contract_status')['partner'].count().reset_index()
+    contracts_status_count.columns = ['status', 'count']
+    
+    # Tình trạng thanh toán
+    payment_status_count = tours_df.groupby('payment_status')['partner'].count().reset_index()
+    payment_status_count.columns = ['status', 'count']
+    
+    # Dịch vụ đang giữ
+    service_inventory = tours_df.groupby('service_type')['num_customers'].sum().reset_index()
+    service_inventory.columns = ['service_type', 'total_units']
+    
+    # Tính tổng doanh thu dịch vụ
+    total_service_revenue = tours_df['revenue'].sum()
+    
+    return {
+        'total_active_partners': total_active_partners,
+        'total_contracts': total_contracts,
+        'contracts_status_count': contracts_status_count,
+        'payment_status_count': payment_status_count,
+        'service_inventory': service_inventory,
+        'total_service_revenue': total_service_revenue
+    }
+
+def calculate_partner_revenue_metrics(tours_df):
+    """Calculate service price metrics (Vùng 2)"""
+    
+    # Tính giá dịch vụ (giá trung bình/khách)
+    tours_df['service_price_per_pax'] = np.where(
+        tours_df['num_customers'] > 0,
+        tours_df['service_cost'] / tours_df['num_customers'],
+        0
+    )
+    
+    # Group by service type
+    service_metrics = tours_df.groupby('service_type').agg(
+        max_price=('service_price_per_pax', 'max'),
+        avg_price=('service_price_per_pax', 'mean'),
+        min_price=('service_price_per_pax', 'min'),
+    ).reset_index()
+    
+    return service_metrics
+
+def create_partner_trend_chart(tours_df, start_date, end_date):
+    """Creates a combined bar/line chart for partner revenue and customer count (Vùng 3)"""
+    
+    period_tours = filter_data_by_date(tours_df, start_date, end_date, date_column='booking_date')
+    
+    # Tương tự như create_trend_chart, xác định granularity
+    period_length = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+    if period_length <= 60:
+        freq = 'W'
+        x_title = "Tuần"
+        date_col = 'week_start'
+        period_tours['week_start'] = pd.to_datetime(period_tours['booking_date']).dt.to_period('W').apply(lambda x: x.start_time)
+        df_trend = period_tours.groupby('week_start').agg(
+            revenue=('revenue', 'sum'),
+            customers=('num_customers', 'sum')
+        ).reset_index()
+    else:
+        freq = 'M'
+        x_title = "Tháng"
+        date_col = 'month_start'
+        period_tours['month_start'] = pd.to_datetime(period_tours['booking_date']).dt.to_period('M').apply(lambda x: x.start_time)
+        df_trend = period_tours.groupby('month_start').agg(
+            revenue=('revenue', 'sum'),
+            customers=('num_customers', 'sum')
+        ).reset_index()
+        
+    if df_trend.empty:
+        return go.Figure()
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Trace 1: Doanh thu (Cột - Trục Y chính)
+    fig.add_trace(
+        go.Bar(x=df_trend[date_col], y=df_trend['revenue'], name='Doanh thu Dịch vụ', marker_color='#636EFA'),
+        secondary_y=False,
+    )
+
+    # Trace 2: Lượt khách (Đường - Trục Y phụ)
+    fig.add_trace(
+        go.Scatter(x=df_trend[date_col], y=df_trend['customers'], name='Số lượng Khách', mode='lines+markers', line=dict(color='#FFA15A', width=3)),
+        secondary_y=True,
+    )
+
+    # Cập nhật layout
+    fig.update_layout(
+        title_text=f"Xu hướng Doanh thu và Số lượng Khách theo {x_title}",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=350,
+        margin=dict(l=50, r=50, t=50, b=30),
+    )
+
+    # Thiết lập trục Y chính (Doanh thu)
+    fig.update_yaxes(title_text="Doanh thu (₫)", secondary_y=False, tickformat=".2s")
+    # Thiết lập trục Y phụ (Khách)
+    fig.update_yaxes(title_text="Số lượng Khách", secondary_y=True, showgrid=False)
+    fig.update_xaxes(title_text=x_title)
+
+    return fig
