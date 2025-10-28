@@ -49,7 +49,11 @@ from utils import (
     calculate_booking_metrics, 
     create_cancellation_trend_chart, 
     create_demographic_pie_chart,
-    create_ratio_trend_chart
+    create_ratio_trend_chart,
+    create_stacked_route_chart,
+    create_top_routes_dual_axis_chart,
+    create_top_routes_ratio_stacked,
+    create_segment_bu_comparison_chart
 )
 
 # Page configuration
@@ -451,359 +455,186 @@ with tab1:
     SEGMENT_COLORS = ['#3CB371', '#6495ED', '#FFA07A']
     BU_COLORS = ['#3CB371', '#6495ED', '#FFA07A', '#FF6347']
     
-    # ----------------------------------------------------
-    # PHẦN 1: PHÂN KHÚC (GIỮ NGUYÊN LOGIC)
-    # ----------------------------------------------------
-    st.markdown("#### Phân bổ theo Phân khúc (FIT / GIT / Inbound)")
-    col1, col2, col3 = st.columns(3)
+    # --- HÀNG 1: PHÂN TÍCH THEO PHÂN KHÚC (BAR CHART NHÓM) ---
+    st.markdown("#### Hàng 1: Hiệu suất theo Phân khúc (FIT / GIT / Inbound)")
+    col1, col2 = st.columns(2)
     
-    # Get segment breakdown data
+    # 1. Chuẩn bị dữ liệu cho Phân khúc (Revenue, Customers, Profit)
     segment_revenue = get_segment_breakdown(filtered_tours, start_date, end_date, metric='revenue')
     segment_customers = get_segment_breakdown(filtered_tours, start_date, end_date, metric='customers')
     segment_profit = get_segment_breakdown(filtered_tours, start_date, end_date, metric='profit')
+
+    # Gom dữ liệu Phân khúc
+    df_segment_comp = segment_revenue[['segment', 'value']].rename(columns={'value': 'Revenue'}).merge(
+        segment_customers[['segment', 'value']].rename(columns={'value': 'Customers'}), on=['segment'], how='outer'
+    ).merge(
+        segment_profit[['segment', 'value']].rename(columns={'value': 'Profit'}), on=['segment'], how='outer'
+    ).fillna(0)
     
+    # Chuyển sang định dạng long
+    df_segment_long = pd.melt(df_segment_comp, id_vars=['segment'], 
+                              value_vars=['Revenue', 'Customers', 'Profit'], 
+                              var_name='Metric', value_name='Value')
+
     with col1:
-        st.markdown("##### 💰 Doanh thu theo phân khúc")
+        st.markdown("##### 📈 So sánh DT, LK, LN theo Phân khúc")
+        fig_segment_bar = create_segment_bu_comparison_chart(df_segment_long, grouping_col='segment') # Hàm mới
+        fig_segment_bar.update_layout(height=350)
+        st.plotly_chart(fig_segment_bar, use_container_width=True)
+        
+    with col2:
+        st.markdown("##### Phân bố Doanh thu (Pie Chart Gốc)")
+        # Vẫn giữ 1 Pie Chart Doanh thu để xem tỷ trọng (%)
         if not segment_revenue.empty:
-            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
-            hovertext = []
-            for seg in segment_revenue['segment']:
-                unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'revenue')
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([
-                        f"{row['business_unit']}: {format_currency(row['value'])} ({row['percentage']:.1f}%)"
-                        for _, row in unit_breakdown.iterrows()
-                    ])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
             fig = go.Figure(go.Pie(
                 labels=segment_revenue['segment'],
                 values=segment_revenue['value'],
                 textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>' +
-                              'Doanh thu: %{value:,.0f} ₫<br>' +
-                              'Tỉ lệ: %{percent}<br><br>' +
-                              '<b>Theo đơn vị:</b><br>' +
-                              '%{customdata}' + 
-                              '<extra></extra>',
                 marker=dict(colors=SEGMENT_COLORS)
             ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-    
-    with col2:
-        st.markdown("##### 👥 Lượt khách theo phân khúc")
-        if not segment_customers.empty:
-            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
-            hovertext = []
-            for seg in segment_customers['segment']:
-                unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'customers')
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([
-                        f"{row['business_unit']}: {format_number(row['value'])} ({row['percentage']:.1f}%)"
-                        for _, row in unit_breakdown.iterrows()
-                    ])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
-            fig = go.Figure(go.Pie(
-                labels=segment_customers['segment'],
-                values=segment_customers['value'],
-                textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>' +
-                              'Lượt khách: %{value:,.0f}<br>' +
-                              'Tỉ lệ: %{percent}<br><br>' +
-                              '<b>Theo đơn vị:</b><br>' +
-                              '%{customdata}' +
-                              '<extra></extra>',
-                marker=dict(colors=SEGMENT_COLORS)
-            ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-    
-    with col3:
-        st.markdown("##### 💵 Lợi nhuận theo phân khúc")
-        if not segment_profit.empty:
-            # (GIỮ NGUYÊN CODE TẠO BIỂU ĐỒ PIE SEGMENT)
-            hovertext = []
-            for seg in segment_profit['segment']:
-                unit_breakdown = get_segment_unit_breakdown(filtered_tours, start_date, end_date, seg, 'profit')
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([
-                        f"{row['business_unit']}: {format_currency(row['value'])} ({row['percentage']:.1f}%)"
-                        for _, row in unit_breakdown.iterrows()
-                    ])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
-            fig = go.Figure(go.Pie(
-                labels=segment_profit['segment'],
-                values=segment_profit['value'],
-                textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>' +
-                              'Lợi nhuận: %{value:,.0f} ₫<br>' +
-                              'Tỉ lệ: %{percent}<br><br>' +
-                              '<b>Theo đơn vị:</b><br>' +
-                              '%{customdata}' +
-                              '<extra></extra>',
-                marker=dict(colors=SEGMENT_COLORS)
-            ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            fig.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
             st.plotly_chart(fig)
 
 
-    # ----------------------------------------------------
-    # PHẦN 2: PHÂN BỔ THEO ĐƠN VỊ KINH DOANH (ĐÃ THÊM)
-    # ----------------------------------------------------
-    st.markdown("#### Phân bổ theo Khu vực Đơn vị Kinh doanh")
-    col1, col2, col3 = st.columns(3)
+    st.markdown("---")
     
-    # Lấy dữ liệu phân bổ theo Đơn vị Kinh doanh (CẦN get_unit_breakdown_simple trong utils.py)
-    bu_revenue = get_unit_breakdown_simple(filtered_tours, metric='revenue')
-    bu_customers = get_unit_breakdown_simple(filtered_tours, metric='customers')
-    bu_profit = get_unit_breakdown_simple(filtered_tours, metric='profit')
+    # --- HÀNG 2: PHÂN TÍCH THEO KHU VỰC (BAR CHART NHÓM) ---
+    st.markdown("#### Hàng 2: Hiệu suất theo Khu vực Đơn vị Kinh doanh")
     
+    # 2. Chuẩn bị dữ liệu cho Đơn vị Kinh doanh
+    bu_revenue = get_unit_breakdown_simple(filtered_tours, metric='revenue').rename(columns={'value': 'Revenue', 'business_unit': 'group'})
+    bu_customers = get_unit_breakdown_simple(filtered_tours, metric='customers').rename(columns={'value': 'Customers', 'business_unit': 'group'})
+    bu_profit = get_unit_breakdown_simple(filtered_tours, metric='profit').rename(columns={'value': 'Profit', 'business_unit': 'group'})
+    
+    # Gom dữ liệu Đơn vị Kinh doanh
+    df_bu_comp = bu_revenue[['group', 'Revenue']].merge(
+        bu_customers[['group', 'Customers']], on='group', how='inner'
+    ).merge(
+        bu_profit[['group', 'Profit']], on='group', how='inner'
+    )
+    
+    df_bu_long = pd.melt(df_bu_comp, id_vars=['group'], 
+                              value_vars=['Revenue', 'Customers', 'Profit'], 
+                              var_name='Metric', value_name='Value')
+
+    col1, col2 = st.columns(2)
+
     with col1:
-        st.markdown("##### 💰 Doanh thu theo Khu vực")
+        st.markdown("##### 📈 So sánh DT, LK, LN theo Khu vực")
+        fig_bu_bar = create_segment_bu_comparison_chart(df_bu_long, grouping_col='group') # Hàm mới
+        fig_bu_bar.update_layout(height=350)
+        st.plotly_chart(fig_bu_bar, use_container_width=True)
+        
+    with col2:
+        st.markdown("##### Phân bố Doanh thu Khu vực (Pie Chart Gốc)")
         if not bu_revenue.empty:
             fig = go.Figure(go.Pie(
-                labels=bu_revenue['business_unit'],
-                values=bu_revenue['value'],
+                labels=bu_revenue['group'],
+                values=bu_revenue['Revenue'],
                 textinfo='label+percent',
-                hovertemplate='<b>%{label}</b><br>Doanh thu: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<extra></extra>',
                 marker=dict(colors=BU_COLORS)
             ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-            
-    with col2:
-        st.markdown("##### 👥 Lượt khách theo Khu vực")
-        if not bu_customers.empty:
-            fig = go.Figure(go.Pie(
-                labels=bu_customers['business_unit'],
-                values=bu_customers['value'],
-                textinfo='label+percent',
-                hovertemplate='<b>%{label}</b><br>Lượt khách: %{value:,.0f}<br>Tỉ lệ: %{percent}<extra></extra>',
-                marker=dict(colors=BU_COLORS)
-            ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-            
-    with col3:
-        st.markdown("##### 💵 Lợi nhuận theo Khu vực")
-        if not bu_profit.empty:
-            fig = go.Figure(go.Pie(
-                labels=bu_profit['business_unit'],
-                values=bu_profit['value'],
-                textinfo='label+percent',
-                hovertemplate='<b>%{label}</b><br>Lợi nhuận: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<extra></extra>',
-                marker=dict(colors=BU_COLORS)
-            ))
-            fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            fig.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
             st.plotly_chart(fig)
     
     st.markdown("---")
+
     
-# ========== VÙNG 4: CÁC BẢNG THÔNG TIN KHÁC ==========
-    st.markdown("### Vùng 4: Các bảng thông tin khác")
+    # ========== VÙNG 4: THEO ĐƠN VỊ KINH DOANH ==========
+    st.markdown("### Vùng 4: Hiệu suất theo Đơn vị Kinh doanh")
     
+    # Get unit data
+    unit_table = get_unit_detailed_table(filtered_tours, filtered_plans, start_date, end_date)
+    
+    # Row 1: Revenue vs Plan comparison
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### So sánh Doanh thu Thực hiện và Kế hoạch")
+        if not unit_table.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=unit_table['business_unit'],
+                y=unit_table['planned_revenue'],
+                name='Kế hoạch',
+                marker_color='#FFA15A'
+            ))
+            fig.add_trace(go.Bar(
+                x=unit_table['business_unit'],
+                y=unit_table['revenue'],
+                name='Thực hiện',
+                marker_color='#636EFA'
+            ))
+            fig.update_layout(xaxis_title="", yaxis_title="Doanh thu (₫)", height=300, barmode='group', margin=dict(l=30, r=30, t=10, b=80))
+            st.plotly_chart(fig)
+    
+    with col2:
+        st.markdown("#### Tỷ suất Lợi nhuận Gộp theo Đơn vị")
+        if not unit_table.empty:
+            unit_margin = unit_table[['business_unit', 'profit_margin']].copy()
+            fig = create_profit_margin_chart_with_color(unit_margin, 'profit_margin', 'business_unit', '')
+            st.plotly_chart(fig)
+    
+    # Row 2: Detailed table
+    st.markdown("#### Bảng số liệu chi tiết theo Đơn vị")
+    if not unit_table.empty:
+        display_df = unit_table.copy()
+        display_df = display_df[[
+            'business_unit', 'revenue', 'num_customers', 'gross_profit',
+            'profit_margin', 'avg_revenue_per_customer'
+        ]]
+        display_df['revenue'] = display_df['revenue'].apply(format_currency)
+        display_df['num_customers'] = display_df['num_customers'].apply(format_number)
+        display_df['gross_profit'] = display_df['gross_profit'].apply(format_currency)
+        display_df['profit_margin'] = display_df['profit_margin'].apply(lambda x: f"{x:.1f}%")
+        display_df['avg_revenue_per_customer'] = display_df['avg_revenue_per_customer'].apply(format_currency)
+        display_df.columns = ['Đơn vị', 'Doanh thu', 'Lượt khách', 'Lợi nhuận gộp', 'Tỷ suất LN (%)', 'DT TB/khách']
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+# ========== VÙNG 5: THÔNG TIN TUYẾN TOUR ==========
+    st.markdown("### Vùng 5: Thông tin tuyến tour")
+
     # Chuẩn bị dữ liệu cho cả 3 chỉ số
     top_revenue = get_top_routes(filtered_tours, n=10, metric='revenue')
     top_customers = get_top_routes(filtered_tours, n=10, metric='customers')
     top_profit = get_top_routes(filtered_tours, n=10, metric='profit')
-    
-    # --- HÀNG 1: DOANH THU (Đã có sẵn, điều chỉnh lại) ---
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        st.markdown("##### 🎯 Top 10 Tuyến Tour (Doanh thu)")
-        if not top_revenue.empty:
-            fig = go.Figure()
-            hovertext = []
-            for route in top_revenue['route'][::-1]:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route)
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['revenue'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            fig.add_trace(go.Bar(
-                y=top_revenue['route'][::-1],
-                x=top_revenue['revenue'][::-1],
-                orientation='h',
-                text=[format_currency(v) for v in top_revenue['revenue'][::-1]],
-                textposition='outside',
-                marker_color='#636EFA',
-                customdata=hovertext,
-                hovertemplate='<b>%{y}</b><br>Tổng DT: %{x:,.0f} ₫<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
-            st.plotly_chart(fig)
-        else:
-            st.info("Không có dữ liệu Top 10 Tuyến Tour.")
-    
-    with col2:
-        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Doanh thu)")
-        if not top_revenue.empty:
-            labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_revenue['route']]
-            hovertext = []
-            for route in top_revenue['route']:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route)
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['revenue'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
-            fig = go.Figure(go.Pie(
-                labels=labels,
-                values=top_revenue['revenue'],
-                textposition='outside',
-                textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>Doanh thu: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-        else:
-            st.info("Không có dữ liệu tỉ trọng tuyến.")
 
-    st.markdown("---")
-    
-    # --- HÀNG 2: LƯỢT KHÁCH (ĐÃ THÊM) ---
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        st.markdown("##### 🎯 Top 10 Tuyến Tour (Lượt khách)")
-        if not top_customers.empty:
-            fig = go.Figure()
-            # Lấy breakdown theo Đơn vị cho hover (giá trị là Lượt khách)
-            hovertext = []
-            for route in top_customers['route'][::-1]:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='customers') # <--- Metric = customers
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_number(row['num_customers'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            fig.add_trace(go.Bar(
-                y=top_customers['route'][::-1],
-                x=top_customers['num_customers'][::-1],
-                orientation='h',
-                text=[format_number(v) for v in top_customers['num_customers'][::-1]],
-                textposition='outside',
-                marker_color='#FF97FF', # Màu khác cho Lượt khách
-                customdata=hovertext,
-                hovertemplate='<b>%{y}</b><br>Tổng LK: %{x:,.0f}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
-            st.plotly_chart(fig)
-        else:
-            st.info("Không có dữ liệu Top 10 Tuyến Tour.")
-            
-    with col2:
-        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Lượt khách)")
-        if not top_customers.empty:
-            labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_customers['route']]
-            
-            hovertext = []
-            for route in top_customers['route']:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='customers') # <--- Metric = customers
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_number(row['num_customers'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
-            fig = go.Figure(go.Pie(
-                labels=labels,
-                values=top_customers['num_customers'],
-                textposition='outside',
-                textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>Lượt khách: %{value:,.0f}<br>Tỉ lệ: %{percent}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
-        else:
-            st.info("Không có dữ liệu tỉ trọng tuyến.")
+    # Hợp nhất dữ liệu Top 10 vào 1 DataFrame duy nhất để so sánh
+    df_merged_top10 = pd.DataFrame({'route': top_revenue['route'].tolist()})
+    df_merged_top10 = df_merged_top10.merge(top_revenue[['route', 'revenue']], on='route', how='left')
+    df_merged_top10 = df_merged_top10.merge(top_customers[['route', 'num_customers']], on='route', how='left')
+    df_merged_top10 = df_merged_top10.merge(top_profit[['route', 'gross_profit']], on='route', how='left')
+    df_merged_top10 = df_merged_top10.fillna(0)
+    df_merged_top10 = df_merged_top10.sort_values('revenue', ascending=False) # Sắp xếp theo DT
 
-    st.markdown("---")
-
-    # --- HÀNG 3: LỢI NHUẬN (ĐÃ THÊM) ---
-    col1, col2 = st.columns([3, 2])
+    # --- HÀNG 1: BIỂU ĐỒ 1 - SO SÁNH TUYỆT ĐỐI (TRỤC KÉP) ---
+    st.markdown("#### Hàng 1: So sánh Giá trị Tuyệt đối (Doanh thu, Lượt khách, Lợi nhuận)")
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("##### 🎯 Top 10 Tuyến Tour (Lợi nhuận)")
-        if not top_profit.empty:
-            fig = go.Figure()
-            hovertext = []
-            for route in top_profit['route'][::-1]:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='profit') # <--- Metric = profit
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['gross_profit'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            fig.add_trace(go.Bar(
-                y=top_profit['route'][::-1],
-                x=top_profit['gross_profit'][::-1],
-                orientation='h',
-                text=[format_currency(v) for v in top_profit['gross_profit'][::-1]],
-                textposition='outside',
-                marker_color='#FFA15A', # Màu khác cho Lợi nhuận
-                customdata=hovertext,
-                hovertemplate='<b>%{y}</b><br>Tổng LN: %{x:,.0f} ₫<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(xaxis_title="", yaxis_title="", height=230, showlegend=False, margin=dict(l=100, r=30, t=10, b=30))
-            st.plotly_chart(fig)
+        st.markdown("##### 📈 So sánh DT, LK, LN theo Tuyến Tour")
+        if not df_merged_top10.empty:
+            # Hàm mới: Biểu đồ cột nhóm/kết hợp với trục kép
+            fig_dual_axis = create_top_routes_dual_axis_chart(df_merged_top10) # <--- Hàm mới
+            st.plotly_chart(fig_dual_axis, use_container_width=True)
         else:
             st.info("Không có dữ liệu Top 10 Tuyến Tour.")
 
+    # --- HÀNG 2: BIỂU ĐỒ 2 - TỶ TRỌNG ĐÓNG GÓP (100% STACKED PIE/BAR) ---
     with col2:
-        st.markdown("##### 📊 Tỉ trọng các tuyến (%) (Lợi nhuận)")
-        if not top_profit.empty:
-            labels = [route if len(route) <= 12 else route[:10] + ".." for route in top_profit['route']]
-            
-            hovertext = []
-            for route in top_profit['route']:
-                unit_breakdown = get_route_unit_breakdown(filtered_tours, route, metric='profit') # <--- Metric = profit
-                if not unit_breakdown.empty:
-                    breakdown_text = "<br>".join([f"{row['business_unit']}: {format_currency(row['gross_profit'])} ({row['percentage']:.1f}%)"
-                                                    for _, row in unit_breakdown.iterrows()])
-                    hovertext.append(breakdown_text)
-                else:
-                    hovertext.append("")
-            
-            fig = go.Figure(go.Pie(
-                labels=labels,
-                values=top_profit['gross_profit'],
-                textposition='outside',
-                textinfo='label+percent',
-                customdata=hovertext,
-                hovertemplate='<b>%{label}</b><br>Lợi nhuận: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<br><br><b>Theo đơn vị:</b><br>%{customdata}<extra></extra>'
-            ))
-            fig.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig)
+        st.markdown("##### 📊 Tỷ trọng Đóng góp của Top 10 Tuyến Tour")
+        if not df_merged_top10.empty:
+            # Hàm mới: Biểu đồ cột xếp chồng 100% cho Tỷ trọng DT, LK, LN
+            fig_stacked_ratio = create_top_routes_ratio_stacked(df_merged_top10) # <--- Hàm mới
+            st.plotly_chart(fig_stacked_ratio, use_container_width=True)
         else:
-            st.info("Không có dữ liệu tỉ trọng tuyến.")
+            st.info("Không có dữ liệu tỷ trọng.")
+
 
     st.markdown("---")
     
-    # ========== VÙNG 5: CHỈ SỐ QUẢN LÝ HOẠT ĐỘNG ==========
-    st.markdown("### Vùng 5: Chỉ số Quản lý Hoạt động")
+    # ========== VÙNG 6: CHỈ SỐ QUẢN LÝ HOẠT ĐỘNG ==========
+    st.markdown("### Vùng 6: Chỉ số Quản lý Hoạt động")
     
     # Calculate operational metrics (use all-time dimensional data for accurate rates)
     ops_metrics = calculate_operational_metrics(tours_filtered_dimensional)
@@ -844,6 +675,10 @@ with tab1:
 # TAB 2: CHI TIẾT (3 VÙNG THEO SPEC)
 # ============================================================
 with tab2:
+    route_table = get_route_detailed_table(filtered_tours, filtered_plans, start_date, end_date)
+    top_revenue = get_top_routes(filtered_tours, n=10, metric='revenue')
+    top_customers = get_top_routes(filtered_tours, n=10, metric='customers')
+    top_profit = get_top_routes(filtered_tours, n=10, metric='profit')
 # ========== VÙNG 1: TÓM TẮT HIỆU SUẤT BOOKING (ĐÃ THÊM KPI VÀ TRENDS) ==========
     st.markdown("### Vùng 1: Tóm tắt Hiệu suất Booking")
     
@@ -940,28 +775,19 @@ with tab2:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("##### Theo Doanh thu")
-        if not top_revenue.empty:
-            fig = create_bar_chart(top_revenue.head(5), 'route', 'revenue', '', orientation='v')
-            fig.update_traces(text=[format_currency(v) for v in top_revenue.head(5)['revenue']], textposition='outside')
-            fig.update_layout(height=200, margin=dict(l=30, r=30, t=10, b=60))
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("##### Doanh thu (Phân bổ BU)")
+        fig_rev_stacked = create_stacked_route_chart(filtered_tours, metric='revenue', title='')
+        st.plotly_chart(fig_rev_stacked, use_container_width=True)
     
     with col2:
-        st.markdown("##### Theo Lượt khách")
-        if not top_customers.empty:
-            fig = create_bar_chart(top_customers.head(5), 'route', 'num_customers', '', orientation='v')
-            fig.update_traces(text=[format_number(v) for v in top_customers.head(5)['num_customers']], textposition='outside')
-            fig.update_layout(height=200, margin=dict(l=30, r=30, t=10, b=60))
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("##### Lượt khách (Phân bổ BU)")
+        fig_cust_stacked = create_stacked_route_chart(filtered_tours, metric='num_customers', title='')
+        st.plotly_chart(fig_cust_stacked, use_container_width=True)
     
     with col3:
-        st.markdown("##### Theo Lợi nhuận")
-        if not top_profit.empty:
-            fig = create_bar_chart(top_profit.head(5), 'route', 'gross_profit', '', orientation='v')
-            fig.update_traces(text=[format_currency(v) for v in top_profit.head(5)['gross_profit']], textposition='outside')
-            fig.update_layout(height=200, margin=dict(l=30, r=30, t=10, b=60))
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("##### Lợi nhuận (Phân bổ BU)")
+        fig_profit_stacked = create_stacked_route_chart(filtered_tours, metric='gross_profit', title='')
+        st.plotly_chart(fig_profit_stacked, use_container_width=True)
     
     st.markdown("")
 
@@ -1143,56 +969,6 @@ with tab2:
 
 
 
-    # ========== VÙNG 5: THEO ĐƠN VỊ KINH DOANH ==========
-    st.markdown("### Vùng 5: Hiệu suất theo Đơn vị Kinh doanh")
-    
-    # Get unit data
-    unit_table = get_unit_detailed_table(filtered_tours, filtered_plans, start_date, end_date)
-    
-    # Row 1: Revenue vs Plan comparison
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### So sánh Doanh thu Thực hiện và Kế hoạch")
-        if not unit_table.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=unit_table['business_unit'],
-                y=unit_table['planned_revenue'],
-                name='Kế hoạch',
-                marker_color='#FFA15A'
-            ))
-            fig.add_trace(go.Bar(
-                x=unit_table['business_unit'],
-                y=unit_table['revenue'],
-                name='Thực hiện',
-                marker_color='#636EFA'
-            ))
-            fig.update_layout(xaxis_title="", yaxis_title="Doanh thu (₫)", height=300, barmode='group', margin=dict(l=30, r=30, t=10, b=80))
-            st.plotly_chart(fig)
-    
-    with col2:
-        st.markdown("#### Tỷ suất Lợi nhuận Gộp theo Đơn vị")
-        if not unit_table.empty:
-            unit_margin = unit_table[['business_unit', 'profit_margin']].copy()
-            fig = create_profit_margin_chart_with_color(unit_margin, 'profit_margin', 'business_unit', '')
-            st.plotly_chart(fig)
-    
-    # Row 2: Detailed table
-    st.markdown("#### Bảng số liệu chi tiết theo Đơn vị")
-    if not unit_table.empty:
-        display_df = unit_table.copy()
-        display_df = display_df[[
-            'business_unit', 'revenue', 'num_customers', 'gross_profit',
-            'profit_margin', 'avg_revenue_per_customer'
-        ]]
-        display_df['revenue'] = display_df['revenue'].apply(format_currency)
-        display_df['num_customers'] = display_df['num_customers'].apply(format_number)
-        display_df['gross_profit'] = display_df['gross_profit'].apply(format_currency)
-        display_df['profit_margin'] = display_df['profit_margin'].apply(lambda x: f"{x:.1f}%")
-        display_df['avg_revenue_per_customer'] = display_df['avg_revenue_per_customer'].apply(format_currency)
-        display_df.columns = ['Đơn vị', 'Doanh thu', 'Lượt khách', 'Lợi nhuận gộp', 'Tỷ suất LN (%)', 'DT TB/khách']
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 
 # ============================================================

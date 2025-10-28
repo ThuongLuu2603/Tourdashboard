@@ -1381,8 +1381,10 @@ def calculate_booking_metrics(tours_df, start_date, end_date):
         'cancel_change_rate': cancel_change_rate
     }
 
+# Trong file utils.py
+
 def create_cancellation_trend_chart(tours_df, start_date, end_date):
-    """Creates a line chart showing the trend of cancelled/changed customers."""
+    """Creates a line chart showing the trend of cancelled/changed customers (Absolute Count)."""
     cancelled_df = tours_df[tours_df['status'].isin(['Đã hủy', 'Hoãn'])].copy()
     period_cancelled = filter_data_by_date(cancelled_df, start_date, end_date)
     
@@ -1390,7 +1392,12 @@ def create_cancellation_trend_chart(tours_df, start_date, end_date):
         return go.Figure().update_layout(height=250, title="Không có dữ liệu hủy/đổi tour")
 
     period_length = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
-    if period_length <= 30:
+    
+    # SỬA LỖI: Ưu tiên NGÀY cho kỳ ngắn (< 30 ngày)
+    if period_length <= 30: # <--- Ưu tiên Ngày cho kỳ 1 tháng hoặc ít hơn
+        freq_unit = 'D'
+        x_title = "Ngày"
+    elif period_length <= 60:
         freq_unit = 'W'
         x_title = "Tuần"
     else:
@@ -1402,12 +1409,19 @@ def create_cancellation_trend_chart(tours_df, start_date, end_date):
     trend_data = period_cancelled.groupby('period').agg(
         total_customers=('num_customers', 'sum')
     ).reset_index()
-
-    # SỬA LỖI TRỤC X: Định dạng Tuần rõ ràng (vd: W43-2025)
-    if freq_unit == 'W':
+    
+    # Định dạng trục X (quan trọng để hiển thị ngày thay vì tuần)
+    if freq_unit == 'D':
+        trend_data['period_str'] = trend_data['period'].dt.strftime('%d/%m')
+        # Đặt tên cột y cho đúng với số lượng tuyệt đối
+        y_label = "Lượt khách hủy/đổi" 
+    elif freq_unit == 'W':
         trend_data['period_str'] = trend_data['period'].apply(lambda x: f"W{x.week}-{x.year}")
+        y_label = "Lượt khách hủy/đổi"
     else:
         trend_data['period_str'] = trend_data['period'].astype(str)
+        y_label = "Lượt khách hủy/đổi"
+        
     
     fig = px.line(
         trend_data, 
@@ -1418,10 +1432,11 @@ def create_cancellation_trend_chart(tours_df, start_date, end_date):
     )
     
     fig.update_xaxes(title=x_title)
-    fig.update_yaxes(title="Lượt khách hủy/đổi")
+    fig.update_yaxes(title=y_label)
     fig.update_layout(height=250, margin=dict(t=30, b=10, l=10, r=10), showlegend=False)
     
     return fig
+
 
 def create_demographic_pie_chart(tours_df, grouping_col, title):
     """Creates a pie chart showing revenue share by age group or nationality."""
@@ -1529,4 +1544,209 @@ def create_ratio_trend_chart(tours_df, start_date, end_date, metric='success_rat
     fig.update_yaxes(title=y_label)
     fig.update_layout(height=250, margin=dict(t=30, b=10, l=10, r=10), showlegend=False)
     
+    return fig
+
+# Trong file utils.py (Hàm create_stacked_route_chart)
+
+def create_stacked_route_chart(tours_df, metric='revenue', title=''):
+    """
+    Creates a stacked bar chart showing the metric total per Route, segmented by Business Unit (BU).
+    """
+    confirmed = filter_confirmed_bookings(tours_df)
+    
+    # 1. Lấy Top 10 Routes theo Doanh thu làm cơ sở sắp xếp
+    top_10_routes = confirmed.groupby('route')['revenue'].sum().nlargest(10).index.tolist()
+    
+    # 2. NHÓM DỮ LIỆU theo Route VÀ Đơn vị Kinh doanh (BU)
+    df_grouped = confirmed[confirmed['route'].isin(top_10_routes)].groupby(
+        ['route', 'business_unit']
+    ).agg(
+        revenue=('revenue', 'sum'),
+        num_customers=('num_customers', 'sum'),
+        gross_profit=('gross_profit', 'sum')
+    ).reset_index()
+    
+    if df_grouped.empty:
+        return go.Figure().update_layout(height=250, title=title)
+        
+    # Xác định các cột và định dạng
+    # ... (Giữ nguyên logic xác định y_col, hover_format, yaxis_title) ...
+    if metric == 'revenue':
+        y_col = 'revenue'
+        hover_format = '₫'
+        yaxis_title = 'Doanh thu (₫)'
+    elif metric == 'num_customers':
+        y_col = 'num_customers'
+        hover_format = ''
+        yaxis_title = 'Lượt khách'
+    else: # gross_profit
+        y_col = 'gross_profit'
+        hover_format = '₫'
+        yaxis_title = 'Lợi nhuận gộp (₫)'
+
+    # Tạo biểu đồ Cột xếp chồng (Dùng df_grouped)
+    fig = px.bar(
+        df_grouped, # <--- ĐÃ SỬA: Dùng DataFrame đã nhóm
+        x='route',
+        y=y_col,
+        color='business_unit', # Xếp chồng theo Đơn vị Kinh doanh
+        title=title,
+        category_orders={'route': top_10_routes}, # Giữ nguyên thứ tự Top 10
+        color_discrete_sequence=px.colors.qualitative.T10
+    )
+    
+    # ... (Giữ nguyên update_layout và update_traces) ...
+    fig.update_layout(
+        barmode='stack', # Đảm bảo xếp chồng
+        xaxis_title="Tuyến Tour",
+        yaxis_title=yaxis_title,
+        height=300,
+        margin=dict(t=30, b=10, l=10, r=10),
+        legend_title_text='Đơn vị KD'
+    )
+    
+    return fig
+
+
+
+def create_top_routes_dual_axis_chart(df_data):
+    """
+    Creates a grouped bar chart comparing Revenue and Profit (Y1) with Customers (Y2)
+    for the top routes. Uses Dual Axis.
+    """
+    if df_data.empty:
+        return go.Figure().update_layout(height=400)
+        
+    # Tạo Subplots với Trục Phụ (Secondary Y-axis)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Trace 1 & 2: Revenue and Profit (Trục Y Chính - Currency)
+    fig.add_trace(go.Bar(
+        x=df_data['route'], y=df_data['revenue'], name='Doanh thu', marker_color='#636EFA',
+        hovertemplate='DT: %{y:,.0f} ₫<extra></extra>'
+    ), secondary_y=False)
+    
+    fig.add_trace(go.Bar(
+        x=df_data['route'], y=df_data['gross_profit'], name='Lợi nhuận', marker_color='#FFA15A',
+        hovertemplate='LN: %{y:,.0f} ₫<extra></extra>'
+    ), secondary_y=False)
+
+    # Trace 3: Customers (Trục Y Phụ - Count)
+    fig.add_trace(go.Scatter(
+        x=df_data['route'], y=df_data['num_customers'], name='Lượt khách', marker=dict(color='#00CC96', size=10),
+        mode='lines+markers', line=dict(dash='dot', width=3),
+        hovertemplate='LK: %{y:,.0f}<extra></extra>'
+    ), secondary_y=True)
+
+    # Cấu hình Layout
+    fig.update_layout(
+        title_text="So sánh DT, LN (Cột) và LK (Đường)",
+        barmode='group',
+        height=400,
+        margin=dict(t=50, b=50, l=50, r=50),
+        legend=dict(orientation="h", y=1.1, x=0.5, xanchor='center'),
+        xaxis=dict(title="Tuyến Tour", tickangle=45),
+        yaxis=dict(title="Doanh thu / Lợi nhuận (₫)", side='left', showgrid=True),
+        yaxis2=dict(title="Lượt khách", side='right', showgrid=False)
+    )
+    return fig
+
+def create_top_routes_ratio_stacked(df_data):
+    """
+    Creates a 100% Stacked Bar Chart showing the contribution of each top route 
+    to the total Revenue, Customers, and Profit (3 Metrics).
+    """
+    # 1. Chuyển đổi dữ liệu sang định dạng Long
+    df_long = pd.melt(df_data, id_vars=['route'], 
+                      value_vars=['revenue', 'num_customers', 'gross_profit'],
+                      var_name='Metric', value_name='Value')
+    
+    df_long['Metric'] = df_long['Metric'].replace({
+        'revenue': 'Doanh thu',
+        'num_customers': 'Lượt khách',
+        'gross_profit': 'Lợi nhuận'
+    })
+
+    # 2. Tính Tỷ trọng đóng góp của mỗi Route cho tổng thể (Metric)
+    df_totals = df_long.groupby('Metric')['Value'].sum().reset_index().rename(columns={'Value': 'Total'})
+    df_long = df_long.merge(df_totals, on='Metric')
+    df_long['Ratio'] = df_long['Value'] / df_long['Total'] * 100
+
+    # 3. Tạo Biểu đồ Cột Xếp chồng 100%
+    fig = px.bar(
+        df_long,
+        x='Metric',
+        y='Ratio',
+        color='route',
+        title='Tỷ trọng đóng góp của Top Tuyến Tour (%)',
+        barmode='stack',
+        color_discrete_sequence=px.colors.qualitative.Bold,
+        hover_data={'Ratio': ':.1f', 'Value': True}
+    )
+    
+    fig.update_layout(
+        height=400,
+        margin=dict(t=50, b=50, l=50, r=50),
+        yaxis_title="Tỷ trọng (%)",
+        xaxis_title="Chỉ số",
+        yaxis_tickformat='.0f',
+        legend_title_text='Tuyến Tour'
+    )
+    
+    fig.update_traces(hovertemplate='<b>%{y:.1f}%</b><br>%{x}<br>Route: %{customdata[0]}<extra></extra>',
+                      customdata=df_long[['route']])
+    
+    return fig   
+ 
+def create_segment_bu_comparison_chart(df_data_long, grouping_col='segment'):
+    """
+    Creates a grouped bar chart comparing Revenue and Profit (Y1) with Customers (Y2)
+    for Segments or Business Units.
+    """
+    if df_data_long.empty:
+        return go.Figure().update_layout(height=350, title=f"Không có dữ liệu cho {grouping_col}")
+
+    # 1. Chuẩn bị dữ liệu
+    df_currency = df_data_long[df_data_long['Metric'].isin(['Revenue', 'Profit'])].copy()
+    df_customers = df_data_long[df_data_long['Metric'] == 'Customers'].copy()
+    
+    # 2. Tạo Subplots với Trục Phụ (Secondary Y-axis)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # 3. Trace 1 & 2: Revenue and Profit (Trục Y Chính - Currency)
+    # Lấy các nhóm theo grouping_col (Segment hoặc Group)
+    groups = df_data_long[grouping_col].unique()
+
+    # Thêm Revenue
+    df_rev = df_currency[df_currency['Metric'] == 'Revenue']
+    fig.add_trace(go.Bar(
+        x=df_rev[grouping_col], y=df_rev['Value'], name='Doanh thu', marker_color='#636EFA',
+        hovertemplate='DT: %{y:,.0f} ₫<extra></extra>'
+    ), secondary_y=False)
+    
+    # Thêm Profit
+    df_prof = df_currency[df_currency['Metric'] == 'Profit']
+    fig.add_trace(go.Bar(
+        x=df_prof[grouping_col], y=df_prof['Value'], name='Lợi nhuận', marker_color='#FFA15A',
+        hovertemplate='LN: %{y:,.0f} ₫<extra></extra>'
+    ), secondary_y=False)
+
+    # 4. Trace 3: Customers (Trục Y Phụ - Count)
+    fig.add_trace(go.Scatter(
+        x=df_customers[grouping_col], y=df_customers['Value'], name='Lượt khách', 
+        marker=dict(color='#00CC96', size=8),
+        mode='lines+markers', line=dict(width=3),
+        hovertemplate='LK: %{y:,.0f}<extra></extra>'
+    ), secondary_y=True)
+
+    # 5. Cấu hình Layout
+    fig.update_layout(
+        barmode='group', # Hiển thị cột cạnh nhau để so sánh
+        height=350,
+        margin=dict(t=30, b=30, l=30, r=30),
+        legend=dict(orientation="h", y=1.1, x=0.5, xanchor='center'),
+        xaxis=dict(title=grouping_col, tickangle=0),
+        yaxis=dict(title="Tiền tệ (₫)", side='left', showgrid=True),
+        yaxis2=dict(title="Lượt khách", side='right', showgrid=False)
+    )
     return fig

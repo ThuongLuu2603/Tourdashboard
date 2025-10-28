@@ -24,67 +24,55 @@ class VietravelDataGenerator:
         
         # Define tour routes (tuyến tour)
         self.tour_routes = [
-            "DH & ĐBSH",
-            "Nam Trung Bộ",
-            "Bắc Trung Bộ",
-            "Liên Tuyến miền Tây",
-            "Phú Quốc",
-            "Thái Lan",
-            "Trung Quốc",
-            "Hàn Quốc",
-            "Singapore - Malaysia",
-            "Nhật Bản",
-            "Châu Âu",
-            "Châu Mỹ",
-            "Châu Úc",
-            "Châu Phi",
-            "Tây Bắc",
-            "Đông Bắc",
-            "Tây Nguyên"
+            "DH & ĐBSH", "Nam Trung Bộ", "Bắc Trung Bộ", "Liên Tuyến miền Tây", 
+            "Phú Quốc", "Thái Lan", "Trung Quốc", "Hàn Quốc", "Singapore - Malaysia",
+            "Nhật Bản", "Châu Âu", "Châu Mỹ", "Châu Úc", "Châu Phi", "Tây Bắc",
+            "Đông Bắc", "Tây Nguyên"
         ]
         
         # Business units (đơn vị kinh doanh)
         self.business_units = [
-            "Miền Trung",
-            "Miền Tây",
-            "Miền Bắc",
-            "Trụ sở & ĐNB"
+            "Miền Trung", "Miền Tây", "Miền Bắc", "Trụ sở & ĐNB"
         ]
         
         # Sales channels (kênh bán)
         self.sales_channels = [
-            "Online",
-            "Trực tiếp VPGD",
-            "Đại lý"
+            "Online", "Trực tiếp VPGD", "Đại lý"
         ]
         
         # Segments (phân khúc)
         self.segments = [
-            "FIT",  # Free Independent Traveler
-            "GIT",  # Group Inclusive Tour
-            "Inbound"  # International visitors
+            "FIT", "GIT", "Inbound"
         ]
         
-        # Map routes to business units
-        self.route_to_unit = {
-            "DH & ĐBSH": "Miền Bắc",
-            "Tây Nguyên": "Miền Tây",
-            "Bắc Trung Bộ": "Miền Trung",
-            "Phú Quốc": "Miền Tây",
-            "Liên Tuyến miền Tây": "Miền Tây",
-            "Nam Trung Bộ": "Miền Trung",
-            "Đông Bắc": "Miền Bắc",
-            "Tây Bắc": "Miền Bắc",
-            "Singapore - Malaysia": "Trụ sở & ĐNB",
-            "Hàn Quốc": "Trụ sở & ĐNB",
-            "Nhật Bản": "Trụ sở & ĐNB",
-            "Trung Quốc": "Trụ sở & ĐNB",
-            "Thái Lan": "Trụ sở & ĐNB",
-            "Châu Âu": "Trụ sở & ĐNB",
-            "Châu Mỹ": "Trụ sở & ĐNB",
-            "Châu Úc": "Trụ sở & ĐNB",
-            "Châu Phi": "Trụ sở & ĐNB"
-        }
+        # Map routes to business units (SỬA LỖI: Dùng danh sách các cặp hợp lệ)
+        self.route_unit_pairs = [
+            ("DH & ĐBSH", "Miền Bắc"), ("DH & ĐBSH", "Trụ sở & ĐNB"), # Cho phép DH & ĐBSH bán ở cả 2 nơi
+            ("Tây Nguyên", "Miền Tây"),
+            ("Bắc Trung Bộ", "Miền Trung"),
+            ("Phú Quốc", "Miền Tây"),
+            ("Liên Tuyến miền Tây", "Miền Tây"),
+            ("Nam Trung Bộ", "Miền Trung"),
+            ("Đông Bắc", "Miền Bắc"),
+            ("Tây Bắc", "Miền Bắc"),
+            
+            # Tuyến Quốc tế (Phân bổ)
+            ("Singapore - Malaysia", "Trụ sở & ĐNB"),
+            ("Hàn Quốc", "Trụ sở & ĐNB"),
+            ("Nhật Bản", "Trụ sở & ĐNB"),
+            ("Trung Quốc", "Trụ sở & ĐNB"),
+            ("Thái Lan", "Trụ sở & ĐNB"),
+            
+            # CHÂU ÂU: Phân bổ cho cả Miền Bắc và Trụ sở & ĐNB (ĐÃ SỬA LỖI)
+            ("Châu Âu", "Trụ sở & ĐNB"),
+            ("Châu Âu", "Miền Bắc"),
+            
+            ("Châu Mỹ", "Trụ sở & ĐNB"),
+            ("Châu Úc", "Trụ sở & ĐNB"),
+            ("Châu Phi", "Trụ sở & ĐNB")
+        ]
+        
+        # LƯU Ý: Không sử dụng self.route_to_unit dictionary 1:1 nữa.
         
         # Safety margin thresholds by route
         self.safety_margins = {
@@ -93,12 +81,12 @@ class VietravelDataGenerator:
         
         # Partner Data
         self.partners = [
-                    ("Khách sạn A", "Khách sạn"), ("Khách sạn B", "Khách sạn"), ("Khách sạn C", "Khách sạn"),
-                    ("Hàng không X", "Vé máy bay"), ("Hàng không Y", "Vé máy bay"), 
-                    ("Vận chuyển 1", "Vận chuyển"), ("Vận chuyển 2", "Vận chuyển"),
-                    ("Nhà hàng A", "Ăn uống"), ("Nhà hàng B", "Ăn uống"),
-                    ("Điểm tham quan 1", "Điểm tham quan"), ("Đại lý Quốc tế 1", "Đối tác nước ngoài")
-                ]
+            ("Khách sạn A", "Khách sạn"), ("Khách sạn B", "Khách sạn"), ("Khách sạn C", "Khách sạn"),
+            ("Hàng không X", "Vé máy bay"), ("Hàng không Y", "Vé máy bay"), 
+            ("Vận chuyển 1", "Vận chuyển"), ("Vận chuyển 2", "Vận chuyển"),
+            ("Nhà hàng A", "Ăn uống"), ("Nhà hàng B", "Ăn uống"),
+            ("Điểm tham quan 1", "Điểm tham quan"), ("Đại lý Quốc tế 1", "Đối tác nước ngoài")
+        ]
 
         self.service_types = ["Lưu trú", "Vé máy bay", "Vận chuyển", "Ăn uống", "Tham quan"]
     
@@ -109,7 +97,7 @@ class VietravelDataGenerator:
         tours = []
         
         # Generate customer IDs to simulate returning customers
-        num_customers = int(num_tours * 0.7)  # 70% unique customers
+        num_customers = int(num_tours * 0.7)
         customer_ids = [f"KH{i:06d}" for i in range(1, num_customers + 1)]
         
         for i in range(num_tours):
@@ -119,17 +107,16 @@ class VietravelDataGenerator:
                 end_date=end_date
             ).replace(tzinfo=None)
             
-            # Tour route and related info
-            route = random.choice(self.tour_routes)
-            business_unit = self.route_to_unit[route]
+            # SỬA LỖI: Chọn một cặp (route, business_unit) ngẫu nhiên từ danh sách hợp lệ
+            route, business_unit = random.choice(self.route_unit_pairs)
             
             # Sales channel with realistic distribution
-            channel_weights = [0.35, 0.40, 0.25]  # Online, Direct, Agent
+            channel_weights = [0.35, 0.40, 0.25]
             channel = random.choices(self.sales_channels, weights=channel_weights)[0]
             
             # Segment (phân khúc) based on route and group size
             if route in ["Châu Âu", "Châu Mỹ", "Châu Úc", "Châu Phi", "Nhật Bản", "Hàn Quốc", 
-                        "Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
+                         "Trung Quốc", "Thái Lan", "Singapore - Malaysia"]:
                 segment_weights = [0.25, 0.35, 0.40]
             else:
                 segment_weights = [0.35, 0.55, 0.10]
@@ -187,7 +174,7 @@ class VietravelDataGenerator:
             
             # Partner and Service Data (cho Tab 3)
             partner_name, partner_type = random.choice(self.partners)
-            service_type = partner_type # Tạm thời dùng loại đối tác làm loại dịch vụ
+            service_type = partner_type
             contract_status = random.choices(["Đang triển khai", "Sắp hết hạn", "Đã thanh lý"], weights=[0.8, 0.1, 0.1])[0]
             payment_status = random.choices(["Trả trước", "Trả sau", "Chưa thanh toán"], weights=[0.6, 0.3, 0.1])[0]
             feedback_ratio = random.uniform(0.7, 0.95)
@@ -198,19 +185,13 @@ class VietravelDataGenerator:
                 weights=[0.25, 0.40, 0.30, 0.05]
             )[0]
             
-            # 2. Quốc tịch (Nationality)
             if route in ["Châu Âu", "Châu Mỹ", "Châu Úc"]:
-                # Nếu là tour dài, có thể là khách Inbound hoặc FIT/GIT người Việt đi nước ngoài
                 nationality = random.choices(["Việt Nam", "Mỹ", "Pháp", "Úc"], weights=[0.4, 0.3, 0.2, 0.1])[0]
             else:
                 nationality = random.choices(["Việt Nam", "Hàn Quốc", "Trung Quốc"], weights=[0.8, 0.1, 0.1])[0]
 
-
-
-
             tours.append({
                 'booking_id': f"BK{i+1:06d}",
-                # ... (Giữ nguyên các trường booking_id đến opex) ...
                 'customer_id': customer_id, 'booking_date': booking_date, 'route': route, 
                 'business_unit': business_unit, 'sales_channel': channel, 'segment': segment, 
                 'num_customers': num_customers_in_booking, 'tour_capacity': tour_capacity, 
@@ -218,16 +199,10 @@ class VietravelDataGenerator:
                 'gross_profit': gross_profit, 'gross_profit_margin': gross_profit_margin, 
                 'status': status, 'marketing_cost': marketing_cost, 'sales_cost': sales_cost, 'opex': opex,
                 
-                # Thêm trường Đối tác MỚI
-                'partner': partner_name,
-                'partner_type': partner_type, # <--- TRƯỜNG MỚI ĐỂ PHÂN LOẠI
-                'service_type': service_type,
-                'contract_status': contract_status,
-                'payment_status': payment_status,
-                'feedback_ratio': feedback_ratio,
-                'customer_age_group': age_group,         
-                'customer_nationality': nationality,     
-                'service_cost': service_cost 
+                # Trường Đối tác và Nhân khẩu học
+                'partner': partner_name, 'partner_type': partner_type, 'service_type': service_type,
+                'contract_status': contract_status, 'payment_status': payment_status, 'feedback_ratio': feedback_ratio,
+                'customer_age_group': age_group, 'customer_nationality': nationality, 'service_cost': service_cost
             })
         
         return pd.DataFrame(tours)
@@ -245,8 +220,9 @@ class VietravelDataGenerator:
         
         for year, month in periods:
             for business_unit in self.business_units:
-                # Get routes for this business unit
-                unit_routes = [r for r, u in self.route_to_unit.items() if u == business_unit]
+                
+                # Lấy tất cả các tuyến tour mà đơn vị này có thể bán (SỬA LỖI LOGIC)
+                unit_routes = [r for r, u in self.route_unit_pairs if u == business_unit]
                 
                 for route in unit_routes:
                     for segment in self.segments:
@@ -275,19 +251,12 @@ class VietravelDataGenerator:
                             avg_price = random.randint(3000000, 7000000)
                         
                         planned_revenue = planned_customers * avg_price
-                        
-                        # Gross profit plan (20% margin)
                         planned_gross_profit = planned_revenue * 0.20
                         
                         plans.append({
-                            'year': year,
-                            'month': month,
-                            'business_unit': business_unit,
-                            'route': route,
-                            'segment': segment,
-                            'planned_customers': planned_customers,
-                            'planned_revenue': planned_revenue,
-                            'planned_gross_profit': planned_gross_profit
+                            'year': year, 'month': month, 'business_unit': business_unit, 
+                            'route': route, 'segment': segment, 'planned_customers': planned_customers, 
+                            'planned_revenue': planned_revenue, 'planned_gross_profit': planned_gross_profit
                         })
         
         return pd.DataFrame(plans)
