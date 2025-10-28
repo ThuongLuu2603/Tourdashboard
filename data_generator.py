@@ -193,6 +193,21 @@ class VietravelDataGenerator:
             feedback_ratio = random.uniform(0.7, 0.95)
             service_cost = cost * random.uniform(0.8, 1.2)
 
+            age_group = random.choices(
+                ["18-25 (Gen Z)", "26-35 (Young Pro)", "36-55 (Mid-Career)", "56+ (Retiree)"],
+                weights=[0.25, 0.40, 0.30, 0.05]
+            )[0]
+            
+            # 2. Quốc tịch (Nationality)
+            if route in ["Châu Âu", "Châu Mỹ", "Châu Úc"]:
+                # Nếu là tour dài, có thể là khách Inbound hoặc FIT/GIT người Việt đi nước ngoài
+                nationality = random.choices(["Việt Nam", "Mỹ", "Pháp", "Úc"], weights=[0.4, 0.3, 0.2, 0.1])[0]
+            else:
+                nationality = random.choices(["Việt Nam", "Hàn Quốc", "Trung Quốc"], weights=[0.8, 0.1, 0.1])[0]
+
+
+
+
             tours.append({
                 'booking_id': f"BK{i+1:06d}",
                 # ... (Giữ nguyên các trường booking_id đến opex) ...
@@ -210,6 +225,8 @@ class VietravelDataGenerator:
                 'contract_status': contract_status,
                 'payment_status': payment_status,
                 'feedback_ratio': feedback_ratio,
+                'customer_age_group': age_group,         
+                'customer_nationality': nationality,     
                 'service_cost': service_cost 
             })
         

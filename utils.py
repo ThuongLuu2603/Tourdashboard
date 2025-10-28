@@ -992,29 +992,43 @@ def create_profit_margin_chart_with_color(data, x_col, y_col, title):
 
 def get_route_detailed_table(tours_df, plans_df, start_date, end_date):
     """
-    Get detailed table by route with plan comparison
+    Get detailed table by route with plan comparison, including occupancy and cancellation rates.
     """
-    confirmed_tours = filter_confirmed_bookings(tours_df)
-    period_tours = filter_data_by_date(confirmed_tours, start_date, end_date)
+    # Lấy TẤT CẢ bookings trong kỳ (để tính hủy/đổi và tổng capacity)
+    period_tours_all = filter_data_by_date(tours_df, start_date, end_date)
+    confirmed_tours = filter_confirmed_bookings(period_tours_all)
     
-    if period_tours.empty: 
-        return pd.DataFrame(columns=['route', 'revenue', 'num_customers', 'gross_profit', 'profit_margin', 'planned_revenue', 'revenue_completion'])
+    if period_tours_all.empty: 
+        # Cập nhật danh sách cột trả về
+        return pd.DataFrame(columns=['route', 'revenue', 'num_customers', 'gross_profit', 'profit_margin', 
+                                     'planned_revenue', 'revenue_completion', 'occupancy_rate', 'cancel_rate'])
 
-    # Actual data
-    route_actual = period_tours.groupby('route').agg({
-        'revenue': 'sum',
-        'num_customers': 'sum',
-        'gross_profit': 'sum'
-    }).reset_index()
+    # 1. Tính ACTUALS, OCCUPANCY, và CANCEL/CHANGE Rate theo tuyến
+    route_metrics = period_tours_all.groupby('route').agg(
+        # Thực hiện
+        revenue=('revenue', lambda x: x[period_tours_all['status'] == 'Đã xác nhận'].sum()),
+        gross_profit=('gross_profit', lambda x: x[period_tours_all['status'] == 'Đã xác nhận'].sum()),
+        num_customers_confirmed=('num_customers', lambda x: x[period_tours_all['status'] == 'Đã xác nhận'].sum()),
+        num_customers_all=('num_customers', 'sum'),
+        
+        # Công suất và Hủy/Đổi
+        tour_capacity=('tour_capacity', 'sum'),
+        num_customers_cancelled=('num_customers', lambda x: x[x.index.isin(period_tours_all[period_tours_all['status'].isin(['Đã hủy', 'Hoãn'])].index)].sum())
+    ).reset_index()
     
-    # ĐÃ SỬA: Bảo vệ chia cho 0
-    route_actual['profit_margin'] = np.where(
-        route_actual['revenue'] > 0,
-        (route_actual['gross_profit'] / route_actual['revenue'] * 100),
+    # Tính Tỷ lệ Lấp đầy và Hủy/Đổi
+    route_metrics['occupancy_rate'] = np.where(
+        route_metrics['tour_capacity'] > 0,
+        (route_metrics['num_customers_all'] / route_metrics['tour_capacity'] * 100).round(1),
+        0
+    )
+    route_metrics['cancel_rate'] = np.where(
+        route_metrics['num_customers_all'] > 0,
+        (route_metrics['num_customers_cancelled'] / route_metrics['num_customers_all'] * 100).round(1),
         0
     )
     
-    # Plan data
+    # 2. Xử lý Plans (Giữ nguyên logic cũ)
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
     
@@ -1031,28 +1045,29 @@ def get_route_detailed_table(tours_df, plans_df, start_date, end_date):
         'planned_gross_profit': 'sum'
     }).reset_index()
     
-    # Merge
-    route_table = route_actual.merge(route_plan, on='route', how='left').fillna(0)
+    # 3. Merge và Final Calculation
+    route_table = route_metrics.merge(route_plan, on='route', how='left').fillna(0)
     
-    # ĐÃ SỬA: Bảo vệ chia cho 0
+    # Tỷ suất LN
+    route_table['profit_margin'] = np.where(
+        route_table['revenue'] > 0,
+        (route_table['gross_profit'] / route_table['revenue'] * 100).round(1),
+        0
+    )
+
+    # Tỷ lệ Hoàn thành Kế hoạch
     route_table['revenue_completion'] = np.where(
         route_table['planned_revenue'] > 0,
-        (route_table['revenue'] / route_table['planned_revenue'] * 100),
-        0
-    )
-    route_table['customers_completion'] = np.where(
-        route_table['planned_customers'] > 0,
-        (route_table['num_customers'] / route_table['planned_customers'] * 100),
-        0
-    )
-    route_table['profit_completion'] = np.where(
-        route_table['planned_gross_profit'] > 0,
-        (route_table['gross_profit'] / route_table['planned_gross_profit'] * 100),
+        (route_table['revenue'] / route_table['planned_revenue'] * 100).round(1),
         0
     )
     
-    return route_table
-
+    # Đổi tên cột cho phù hợp với hiển thị cũ
+    route_table.rename(columns={'num_customers_confirmed': 'num_customers'}, inplace=True)
+    
+    # Giới hạn các cột cuối cùng (Chỉ trả về các cột cần thiết)
+    return route_table[['route', 'revenue', 'num_customers', 'gross_profit', 
+                        'profit_margin', 'revenue_completion', 'occupancy_rate', 'cancel_rate']]
 
 def get_unit_detailed_table(tours_df, plans_df, start_date, end_date):
     """
@@ -1340,4 +1355,178 @@ def create_partner_trend_chart(tours_df, start_date, end_date):
     fig.update_yaxes(title_text="Số lượng Khách", secondary_y=True, showgrid=False)
     fig.update_xaxes(title_text=x_title)
 
+    return fig
+
+# HÀM MỚI CHO TAB 2  
+def calculate_booking_metrics(tours_df, start_date, end_date):
+    """Calculates Total Booked Customers, Success Rate, and Cancellation/Change Rate."""
+    period_tours = filter_data_by_date(tours_df, start_date, end_date)
+    
+    total_customers_all = period_tours['num_customers'].sum()
+    confirmed_tours = filter_confirmed_bookings(period_tours)
+    total_customers_confirmed = confirmed_tours['num_customers'].sum()
+    
+    # Successful Booking Rate (confirmed / total attempts)
+    success_rate = (total_customers_confirmed / total_customers_all * 100) if total_customers_all > 0 else 0
+    
+    # Cancellation/Change Rate (Non-confirmed / Total)
+    cancelled_changed = period_tours[period_tours['status'].isin(['Đã hủy', 'Hoãn'])]
+    total_customers_cancelled = cancelled_changed['num_customers'].sum()
+    
+    cancel_change_rate = (total_customers_cancelled / total_customers_all * 100) if total_customers_all > 0 else 0
+    
+    return {
+        'total_booked_customers': total_customers_all,
+        'success_rate': success_rate,
+        'cancel_change_rate': cancel_change_rate
+    }
+
+def create_cancellation_trend_chart(tours_df, start_date, end_date):
+    """Creates a line chart showing the trend of cancelled/changed customers."""
+    cancelled_df = tours_df[tours_df['status'].isin(['Đã hủy', 'Hoãn'])].copy()
+    period_cancelled = filter_data_by_date(cancelled_df, start_date, end_date)
+    
+    if period_cancelled.empty:
+        return go.Figure().update_layout(height=250, title="Không có dữ liệu hủy/đổi tour")
+
+    period_length = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+    if period_length <= 30:
+        freq_unit = 'W'
+        x_title = "Tuần"
+    else:
+        freq_unit = 'M'
+        x_title = "Tháng"
+    
+    period_cancelled['period'] = pd.to_datetime(period_cancelled['booking_date']).dt.to_period(freq_unit)
+    
+    trend_data = period_cancelled.groupby('period').agg(
+        total_customers=('num_customers', 'sum')
+    ).reset_index()
+
+    # SỬA LỖI TRỤC X: Định dạng Tuần rõ ràng (vd: W43-2025)
+    if freq_unit == 'W':
+        trend_data['period_str'] = trend_data['period'].apply(lambda x: f"W{x.week}-{x.year}")
+    else:
+        trend_data['period_str'] = trend_data['period'].astype(str)
+    
+    fig = px.line(
+        trend_data, 
+        x='period_str', 
+        y='total_customers', 
+        title='Xu hướng Lượt khách hủy/đổi tour',
+        markers=True
+    )
+    
+    fig.update_xaxes(title=x_title)
+    fig.update_yaxes(title="Lượt khách hủy/đổi")
+    fig.update_layout(height=250, margin=dict(t=30, b=10, l=10, r=10), showlegend=False)
+    
+    return fig
+
+def create_demographic_pie_chart(tours_df, grouping_col, title):
+    """Creates a pie chart showing revenue share by age group or nationality."""
+    # Giả định cột customer_age_group và customer_nationality tồn tại trong tours_df
+    if grouping_col not in tours_df.columns:
+        return go.Figure().update_layout(height=250, title=f"Thiếu cột '{grouping_col}'")
+        
+    confirmed = filter_confirmed_bookings(tours_df)
+    
+    grouped = confirmed.groupby(grouping_col).agg(
+        total_revenue=('revenue', 'sum')
+    ).reset_index()
+    
+    # Pie Chart
+    fig = px.pie(
+        grouped, 
+        values='total_revenue', 
+        names=grouping_col,
+        title=title,
+        color_discrete_sequence=px.colors.qualitative.Pastel
+    )
+    
+    fig.update_traces(
+        textinfo='percent+label', 
+        hovertemplate='<b>%{label}</b><br>Doanh thu: %{value:,.0f} ₫<br>Tỉ lệ: %{percent}<extra></extra>'
+    )
+    fig.update_layout(
+        height=250, 
+        margin=dict(t=30, b=10, l=10, r=10), 
+        showlegend=False
+    )
+    return fig
+
+def create_ratio_trend_chart(tours_df, start_date, end_date, metric='success_rate', title=''):
+    """
+    Creates a line chart showing the trend of a specified ratio metric (Success Rate or Cancellation Rate).
+    Requires re-calculating the ratio for each period.
+    """
+    
+    period_tours = filter_data_by_date(tours_df, start_date, end_date)
+    if period_tours.empty:
+        return go.Figure().update_layout(height=250, title=f"Không có dữ liệu {title}")
+
+    # Xác định độ phân giải (Tuần hoặc Tháng)
+    period_length = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+    
+    # SỬA LỖI: Buộc theo NGÀY nếu kỳ báo cáo ngắn (<= 7 ngày)
+    if period_length <= 7:
+        freq_unit = 'D' # <--- SỬA THÀNH NGÀY
+        x_title = "Ngày"
+    elif period_length <= 60:
+        freq_unit = 'W'
+        x_title = "Tuần"
+    else:
+        freq_unit = 'M'
+        x_title = "Tháng"
+    
+    # 1. Nhóm dữ liệu theo Period và tính các thành phần cần thiết
+    period_tours['period'] = pd.to_datetime(period_tours['booking_date']).dt.to_period(freq_unit)
+    
+    trend_data = period_tours.groupby('period').agg(
+        total_customers=('num_customers', 'sum'),
+        total_confirmed=('status', lambda x: (x == 'Đã xác nhận').sum()),
+        total_cancelled=('status', lambda x: (x.isin(['Đã hủy', 'Hoãn'])).sum())
+    ).reset_index()
+    
+    # 2. Tính tỷ lệ (Ratio) cho mỗi Period
+    if metric == 'success_rate':
+        trend_data['ratio'] = np.where(
+            trend_data['total_customers'] > 0,
+            (trend_data['total_confirmed'] / trend_data['total_customers']) * 100,
+            0
+        )
+        y_label = "Tỷ lệ Thành công (%)"
+        color_seq = ['#636EFA']
+    else: # cancellation_rate
+        trend_data['ratio'] = np.where(
+            trend_data['total_customers'] > 0,
+            (trend_data['total_cancelled'] / trend_data['total_customers']) * 100,
+            0
+        )
+        y_label = "Tỷ lệ Hủy/Đổi (%)"
+        color_seq = ['#EF553B']
+    
+    # Định dạng trục X (quan trọng để hiển thị ngày thay vì tuần)
+    if freq_unit == 'D':
+        trend_data['period_str'] = trend_data['period'].dt.strftime('%d/%m')
+    elif freq_unit == 'W':
+        trend_data['period_str'] = trend_data['period'].apply(lambda x: f"W{x.week}-{x.year}")
+    else:
+        trend_data['period_str'] = trend_data['period'].astype(str)
+        
+    
+    # 3. Tạo biểu đồ đường
+    fig = px.line(
+        trend_data, 
+        x='period_str', 
+        y='ratio', 
+        title=title,
+        markers=True,
+        color_discrete_sequence=color_seq
+    )
+    
+    fig.update_xaxes(title=x_title)
+    fig.update_yaxes(title=y_label)
+    fig.update_layout(height=250, margin=dict(t=30, b=10, l=10, r=10), showlegend=False)
+    
     return fig

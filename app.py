@@ -43,7 +43,13 @@ from utils import (
     # Các hàm Đối tác mới (ĐÃ THÊM)
     calculate_partner_kpis, calculate_partner_revenue_metrics, create_partner_trend_chart,
     calculate_partner_breakdown_by_type,calculate_service_inventory, calculate_service_cancellation_metrics,
-    calculate_partner_revenue_by_type
+    calculate_partner_revenue_by_type,
+
+    # CHỨC NĂNG MỚI CHO TAB 2
+    calculate_booking_metrics, 
+    create_cancellation_trend_chart, 
+    create_demographic_pie_chart,
+    create_ratio_trend_chart
 )
 
 # Page configuration
@@ -212,9 +218,12 @@ if selected_service != "Tất cả":
 # Calculate KPIs using dimensionally filtered data (calculate_kpis will handle date filtering)
 kpis = calculate_kpis(tours_filtered_dimensional, filtered_plans, start_date, end_date)
 
+
 # Also create a date+dimension filtered version for charts that don't need historical data
 filtered_tours = filter_data_by_date(tours_filtered_dimensional, start_date, end_date)
 
+# TÍNH TOÁN BOOKING METRICS CHO TAB 2 (ĐÃ DI CHUYỂN)
+booking_metrics = calculate_booking_metrics(tours_df, start_date, end_date)
 
 
 if 'show_admin_ui' not in st.session_state:
@@ -249,9 +258,9 @@ if st.session_state.show_admin_ui:
 # MAIN TABS
 # ============================================================
 tab1, tab2, tab3 = st.tabs([
-    "📊 Tổng quan",
-    "🔍 Chi tiết",
-    "🤝 Đối tác" # <--- ĐÃ THÊM TAB 3
+    "📊 Dashboard theo dõi Kinh Doanh",
+    "🔍 Dashboard theo dõi sản phẩm",
+    "🤝 Dashboard theo dõi Đối tác" 
 ])
 
 # ============================================================
@@ -809,7 +818,7 @@ with tab1:
             max_value=100,
             threshold=75
         )
-        st.plotly_chart(fig_occ)
+        st.plotly_chart(fig_occ, key="gauge_tab1")
     
     with col2:
         fig_cancel = create_gauge_chart(
@@ -835,8 +844,90 @@ with tab1:
 # TAB 2: CHI TIẾT (3 VÙNG THEO SPEC)
 # ============================================================
 with tab2:
-    # ========== VÙNG 1: THEO TUYẾN ==========
-    st.markdown("### Vùng 1: Phân tích theo Tuyến")
+# ========== VÙNG 1: TÓM TẮT HIỆU SUẤT BOOKING (ĐÃ THÊM KPI VÀ TRENDS) ==========
+    st.markdown("### Vùng 1: Tóm tắt Hiệu suất Booking")
+    
+    # --- Hàng 1: KPI Cấp cao ---
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="👥 Số lượng khách đã đặt",
+            value=format_number(booking_metrics['total_booked_customers'])
+        )
+
+    with col2:
+        st.metric(
+            label="💰 Tổng Doanh thu",
+            value=format_currency(kpis['actual_revenue'])
+        )
+    with col3:
+        st.markdown("##### 📈 Tỷ lệ Lấp đầy BQ")
+        fig_occ = create_gauge_chart(
+            ops_metrics['avg_occupancy'],
+            "Tỷ lệ Lấp đầy BQ",
+            max_value=100, 
+            threshold=75,
+            is_inverse_metric=False
+        )
+        st.plotly_chart(fig_occ, use_container_width=True, key="gauge_tab2")
+    with col4:
+        st.empty()
+
+    st.markdown("---")
+
+
+    # --- Hàng 2: Tỷ lệ Thành công (Gauge & Trend) ---
+    st.markdown("#### 🟢 Hiệu suất Booking Thành công")
+    col1, col2 = st.columns([1, 3]) # Tỷ lệ 1:3 cho Gauge và Line Chart
+
+    with col1:
+        # Tỷ lệ booking thành công (Gauge Chart)
+        fig_success = create_gauge_chart(
+            booking_metrics['success_rate'],
+            "Tỷ lệ booking thành công",
+            max_value=100, 
+            threshold=90
+        )
+        st.plotly_chart(fig_success, use_container_width=True)
+    
+    with col2:
+        # Xu hướng tỷ lệ booking thành công (Line Chart)
+        fig_success_trend = create_ratio_trend_chart(tours_df, start_date, end_date, 
+                                                     metric='success_rate', 
+                                                     title='Xu hướng Tỷ lệ Booking Thành công (Theo ngày/tuần)')
+        st.plotly_chart(fig_success_trend, use_container_width=True)
+
+    st.markdown("---")
+
+
+    # --- Hàng 3: Tỷ lệ Hủy/Đổi (Gauge & Trend) ---
+    st.markdown("#### 🔴 Hiệu suất Khách Hàng Hủy/Đổi")
+    col1, col2 = st.columns([1, 3]) # Tỷ lệ 1:3 cho Gauge và Line Chart
+
+    with col1:
+        # Tỷ lệ khách hàng hủy tour hoặc thay đổi (Gauge Chart)
+        fig_cancel = create_gauge_chart(
+            booking_metrics['cancel_change_rate'],
+            "Tỷ lệ Khách Hủy/Đổi",
+            max_value=30, 
+            threshold=15, 
+            is_inverse_metric=True
+        )
+        st.plotly_chart(fig_cancel, use_container_width=True)
+        
+    with col2:
+        # Xu hướng tỷ lệ khách hàng hủy tour (Line Chart)
+        fig_cancel_trend_ratio = create_ratio_trend_chart(tours_df, start_date, end_date, 
+                                                           metric='cancellation_rate', 
+                                                           title='Xu hướng Tỷ lệ Khách Hủy/Đổi (Theo ngày/tuần)')
+        st.plotly_chart(fig_cancel_trend_ratio, use_container_width=True)
+
+    st.markdown("---")
+
+
+    # ========== VÙNG 2: THEO TUYẾN ==========
+    st.markdown("### Vùng 2: Phân tích theo Tuyến")
     
     # Get route data
     route_table = get_route_detailed_table(filtered_tours, filtered_plans, start_date, end_date)
@@ -873,26 +964,8 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("")
-    
-    # Row 2: Detailed table
-    st.markdown("#### Bảng số liệu chi tiết theo Tuyến")
-    if not route_table.empty:
-        display_df = route_table.copy()
-        display_df = display_df[[
-            'route', 'revenue', 'num_customers', 'gross_profit', 
-            'profit_margin', 'revenue_completion'
-        ]]
-        display_df['revenue'] = display_df['revenue'].apply(format_currency)
-        display_df['num_customers'] = display_df['num_customers'].apply(format_number)
-        display_df['gross_profit'] = display_df['gross_profit'].apply(format_currency)
-        display_df['profit_margin'] = display_df['profit_margin'].apply(lambda x: f"{x:.1f}%")
-        display_df['revenue_completion'] = display_df['revenue_completion'].apply(lambda x: f"{x:.1f}%")
-        display_df.columns = ['Tuyến', 'Doanh thu', 'Lượt khách', 'Lợi nhuận gộp', 'Tỷ suất LN (%)', 'Tiến độ KH (%)']
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-    
-    st.markdown("")
-    
-    # Row 3: Profit margin with color coding
+
+    # Row 2: Profit margin with color coding
     st.markdown("#### Tỷ suất Lợi nhuận theo Tuyến")
     if not route_table.empty:
         top_10_margin = route_table.nlargest(10, 'profit_margin')[['route', 'profit_margin']]
@@ -900,9 +973,33 @@ with tab2:
         st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
+
+    # Row 3: Detailed table
+    st.markdown("#### Bảng số liệu chi tiết theo Tuyến")
+    if not route_table.empty:
+        display_df = route_table.copy()
+        display_df = display_df[[
+            'route', 'revenue', 'num_customers', 'gross_profit', 
+            'profit_margin', 'revenue_completion', 'occupancy_rate', 'cancel_rate'
+        ]]
+        display_df['revenue'] = display_df['revenue'].apply(format_currency)
+        display_df['num_customers'] = display_df['num_customers'].apply(format_number)
+        display_df['gross_profit'] = display_df['gross_profit'].apply(format_currency)
+        display_df['profit_margin'] = display_df['profit_margin'].apply(lambda x: f"{x:.1f}%")
+        display_df['revenue_completion'] = display_df['revenue_completion'].apply(lambda x: f"{x:.1f}%")
+        display_df['occupancy_rate'] = display_df['occupancy_rate'].apply(lambda x: f"{x:.1f}%")
+        display_df['cancel_rate'] = display_df['cancel_rate'].apply(lambda x: f"{x:.1f}%")
+        display_df.columns = ['Tuyến', 'Doanh thu', 'Lượt khách', 'Lợi nhuận gộp', 
+                      'Tỷ suất LN (%)', 'Tiến độ KH (%)', 'Tỷ lệ Lấp đầy (%)', 'Tỷ lệ Hủy/Đổi (%)']
+
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    # ========== VÙNG 2: THEO KÊNH BÁN VÀ PHÂN KHÚC ==========
-    st.markdown("### Vùng 2: Theo Kênh bán và Phân khúc")
+    st.markdown("")
+    
+
+    
+    # ========== VÙNG 3: THEO KÊNH BÁN VÀ PHÂN KHÚC ==========
+    st.markdown("### Vùng 3: Theo Kênh bán và Phân khúc")
     
     # Get channel and segment data
     channel_revenue = get_channel_breakdown(filtered_tours, start_date, end_date, metric='revenue')
@@ -1006,9 +1103,48 @@ with tab2:
             st.plotly_chart(fig)
     
     st.markdown("---")
+
+# ========== VÙNG 4: XU HƯỚNG VÀ NHÂN KHẨU HỌC (MỚI) ==========
+    st.markdown("### Vùng 4: Xu hướng và Nhân khẩu học")
+
+    # Hàng 1: 2 Biểu đồ Xu hướng (Revenue Trend, Cancellation Trend)
+    col1, col2 = st.columns(2)
     
-    # ========== VÙNG 3: THEO ĐƠN VỊ KINH DOANH ==========
-    st.markdown("### Vùng 3: Hiệu suất theo Đơn vị Kinh doanh")
+    with col1:
+        st.markdown("##### Xu hướng Doanh thu theo thời kỳ")
+        # Xu hướng doanh thu theo từng thời kỳ (Line Chart)
+        fig_rev_trend = create_trend_chart(filtered_tours, start_date, end_date, metrics=['revenue'])
+        st.plotly_chart(fig_rev_trend, use_container_width=True)
+        
+    with col2:
+        st.markdown("##### Xu hướng Khách hàng hủy/đổi tour")
+        # Xu hướng khách hàng hủy tour (Line Chart)
+        fig_cancel_trend = create_cancellation_trend_chart(tours_df, start_date, end_date)
+        st.plotly_chart(fig_cancel_trend, use_container_width=True)
+
+    # Hàng 2: 2 Biểu đồ Tỷ trọng (Age, Nationality)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("##### Tỷ trọng Doanh thu theo Độ tuổi")
+        # Tỷ trọng doanh thu khách hàng theo độ tuổi (Pie Chart)
+        # Giả định cột customer_age_group tồn tại
+        fig_age_pie = create_demographic_pie_chart(filtered_tours, 'customer_age_group', '')
+        st.plotly_chart(fig_age_pie, use_container_width=True)
+
+    with col2:
+        st.markdown("##### Tỷ trọng Doanh thu theo Quốc tịch")
+        # Tỷ trọng doanh thu khách hàng theo quốc tịch (Pie Chart)
+        # Giả định cột customer_nationality tồn tại
+        fig_nat_pie = create_demographic_pie_chart(filtered_tours, 'customer_nationality', '')
+        st.plotly_chart(fig_nat_pie, use_container_width=True)
+        
+    st.markdown("---")
+
+
+
+    # ========== VÙNG 5: THEO ĐƠN VỊ KINH DOANH ==========
+    st.markdown("### Vùng 5: Hiệu suất theo Đơn vị Kinh doanh")
     
     # Get unit data
     unit_table = get_unit_detailed_table(filtered_tours, filtered_plans, start_date, end_date)
